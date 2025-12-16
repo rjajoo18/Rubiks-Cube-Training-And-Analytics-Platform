@@ -15,10 +15,25 @@ class User(db.Model):
 # Defines Solve model in table
 class Solve(db.Model):
     __tablename__ = "solves"
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True)
+
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    state = db.Column(db.String(54), nullable=False)
-    solution_moves = db.Column(db.Text, nullable=False)
-    num_moves = db.Column(db.Integer, nullable=False)
-    source = db.Column(db.String(50), nullable=False, default="manual")
+
+    scramble = db.Column(db.Text, nullable=False)
+    time_ms = db.Column(db.Integer, nullable=True)
+    penalty = db.Column(db.String(10), nullable=False, default="OK")
+    notes = db.Column(db.Text, nullable=True)
+    tags = db.Column(db.ARRAY(db.Text), nullable=True)
+
+    state = db.Column(db.Text, nullable=True)
+    solution_moves = db.Column(db.Text, nullable=True)
+    num_moves = db.Column(db.Integer, nullable=True)
+
+    ml_score = db.Column(db.Float, nullable=True)
+    score_version = db.Column(db.String(50), nullable=True)
+
+    source = db.Column(db.String(50), nullable=False, default="timer")
+    event = db.Column(db.String(20), nullable=False, default="3x3")
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+

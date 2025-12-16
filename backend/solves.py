@@ -81,12 +81,10 @@ def create_solve():
     if not state:
         return jsonify({"error": "state is required"}), 400
 
-    # ✅ backend-side validation
     ok, msg = validate_cube_state_basic(state)
     if not ok:
         return jsonify({"error": msg}), 400
 
-    # ✅ use the real state from frontend (no more test override)
     try:
         cube = Cube(state)
         solver = Solver(cube)
