@@ -4,6 +4,7 @@ from db import db
 from auth import auth_bp
 from solves import solves_bp
 from flask_cors import CORS
+# from dashboard import dashbord_bp
 
 def create_app():
     app = Flask(__name__)
@@ -15,7 +16,7 @@ def create_app():
         app,
         resources={r"/api/*": {
             "origins": "*",
-            "methods": ["GET", "POST", "OPTIONS"],
+            "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
         }},
     )
@@ -24,6 +25,7 @@ def create_app():
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(solves_bp, url_prefix="/api")
+    # app.register_blueprint(dashbord_bp, url_prefix="/api")
 
     @app.route("/api/health")
     def health():
