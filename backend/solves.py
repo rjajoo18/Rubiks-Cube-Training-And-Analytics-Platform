@@ -382,7 +382,7 @@ def create_solve_from_state():
     # Ask kociemba for a (near-optimal) solution.
     # If the cube state is physically impossible, kociemba will throw an exception.
     try:
-        solution_str = kociemba.solve(state)  # e.g. "R U R' U' ..."
+        solution_str = kociemba.solve(state)
         solution_moves = solution_str.split()
     except Exception:
         return jsonify(
@@ -407,3 +407,140 @@ def create_solve_from_state():
     db.session.commit()
 
     return jsonify({"solve": serialize_solve(solve)}), 201
+
+# POST /api/solves/:id/score
+@solves_bp.route("/solves/<int:solve_id>/score", methods=["POST"])
+@require_auth
+def score_solve(solve_id: int):
+    user = request.current_user
+    solve = Solve.query.filter_by(id=solve_id, user_id=user.id).first()
+    if not solve:
+        return jsonify({"error": "Solve not found"}), 404
+    
+    # Return heuristic score (placeholder for ML model later)
+    solve.ml_score = float(heuristic_score(solve))
+    solve.score_version = "heuristic_v0"
+    db.session.commit()
+
+    return jsonify(
+        {
+            "mlScore": solve.ml_score,
+            "scoreVersion": solve.score_version
+        }
+    )
+
+# GET /api/solves
+@solves_bp.route("/solves", methods=["GET"])
+@require_auth
+def list_solves():
+    """
+    List solves for the current user with cursor pagination.
+
+    Query parameters supported:
+      limit=50
+      cursor=...
+      event=3x3
+      penalty=OK
+      source=timer
+      from=2025-12-01T00:00:00
+      to=2025-12-15T00:00:00
+      hasScore=true
+      hasSolution=true
+    """
+    user = request.current_user
+    limit = min(int(request.args.get("limit", 50)), 200)
+    cursor = request.args.get("cursor")
+    event = request.args.get("event", "3x3")
+
+    q = Solve.query.filter_by(user_id=user.id, event=event)
+
+    penalty = request.args.get("penalty")
+    if penalty:
+        q = q.filter_by(Solve.penalty == penalty)
+
+    source = request.args.get("source")
+    if source:
+        q = q.filter_by(Solve.source == source)
+
+    has_score = request.args.get("hasScore")
+    if has_score in ("true", "True", "1"):
+        q = q.filter(Solve.ml_score.isnot(None))
+
+    has_solution = request.args.get("hasSolution")
+    if has_solution in ("true", "True", "1"):
+        q = q.filter(Solve.solution_moves.isnot(None))
+
+    from_iso = request.args.get("from")
+    to_iso = request.args.get("to")
+    if from_iso:
+        q = q.filter(Solve.created_at >= datetime.fromisoformat(from_iso))
+    if to_iso:
+        q = q.filter(Solve.created_at <= datetime.fromisoformat(to_iso))
+
+    q = q.order_by(Solve.created_at.desc(), Solve.id.desc())
+
+    if cursor:
+        c_dt, c_id = decode_cursor(cursor)
+        q = q.filter(
+            (Solve.created_at < c_dt) |
+            ((Solve.created_at == c_dt) & (Solve.id < c_id))
+        )
+
+    items = q.limit(limit + 1).all()
+
+    next_cursor = None
+    if len(items) > limit:
+        last = items[limit - 1]
+        next_cursor = encode_cursor(last.created_at, last.id)
+        items = items[:limit]
+
+    return jsonify({
+        "items": [serialize_solve(s) for s in items],
+        "nextCursor": next_cursor
+    })
+
+# GET /api/solves/:id
+@solves_bp.route("/solves/<int:solve_id>", methods=["GET"])
+@require_auth
+def solve_details(solve_id: int):
+    user = request.current_user
+    solve = Solve.query.filter_by(id=solve_id, user_id=user.id).first()
+    if not solve:
+        return jsonify({"error": "Solve not found"}), 404
+    return jsonify({"solve": serialize_solve(solve)})
+
+# PATCH /api/solves/:id
+@solves_bp.route("/solves/<int:solve_id>", methods=["PATCH"])
+@require_auth
+def edit_solve(solve_id: int):
+    user = request.current_user
+    solve = Solve.query.filter_by(id=solve_id, user_id=user.id).first()
+    if not solve:
+        return jsonify({"error": "Solve not found"}), 404
+
+    data = request.get_json() or {}
+
+    if "penalty" in data: 
+        if data["penalty"] not in (None, "+2", "DNF"):
+            return jsonify({"error": "Invalid penalty"}), 400
+        solve.penalty = data["penalty"]
+
+    if "notes" in data:
+        solve.notes = data["notes"] or " "
+
+    db.session.commit()
+    return jsonify({"solve": serialize_solve(solve)})
+
+# DELETE /api/solves/:id
+@solves_bp.route("/solves/<int:solve_id>", methods=["DELETE"])
+@require_auth
+def delete_solve(solve_id: int):
+    user = request.current_user
+    solve = Solve.query.filter_by(id=solve_id, user_id=user.id).first()
+    if not solve:
+        return jsonify({"error": "Solve not found"}), 404
+
+    db.session.delete(solve)
+    db.session.commit()
+
+    return jsonify({"success": True})
