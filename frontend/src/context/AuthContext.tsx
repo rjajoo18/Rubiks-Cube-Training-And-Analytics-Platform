@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, login as apiLogin, signup as apiSignup, getCurrentUser } from '@/lib/api';
+import { apiClient } from '@/api/client';
+import { User } from '@/types/api';
 
 interface AuthContextType {
   user: User | null;
@@ -23,8 +24,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedToken) {
         setToken(storedToken);
         try {
-          const currentUser = await getCurrentUser();
-          setUser(currentUser);
+          const response = await apiClient.getCurrentUser();
+          setUser(response.user);
         } catch (error) {
           localStorage.removeItem('rubiks_token');
           setToken(null);
@@ -37,15 +38,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await apiLogin(email, password);
+    const response = await apiClient.login(email, password);
     setToken(response.token);
     setUser(response.user);
     localStorage.setItem('rubiks_token', response.token);
   };
 
   const signup = async (email: string, password: string, name: string) => {
-    const user = await apiSignup(email, password, name);
-    const loginResponse = await apiLogin(email, password);
+    await apiClient.signup(email, password, name);
+    const loginResponse = await apiClient.login(email, password);
     setToken(loginResponse.token);
     setUser(loginResponse.user);
     localStorage.setItem('rubiks_token', loginResponse.token);

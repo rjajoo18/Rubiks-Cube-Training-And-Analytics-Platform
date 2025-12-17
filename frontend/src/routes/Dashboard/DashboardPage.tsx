@@ -1,144 +1,156 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { getSolves, Solve } from '@/lib/api';
+import { apiClient } from '@/api/client';
+import { DashboardSummary } from '@/types/api';
+import { formatMs } from '@/utils/time';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { Select } from '@/components/ui/Select';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [solves, setSolves] = useState<Solve[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState('30d');
 
   useEffect(() => {
-    const fetchSolves = async () => {
-      try {
-        const data = await getSolves();
-        setSolves(data);
-      } catch (error) {
-        console.error('Failed to fetch solves:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    loadSummary();
+  }, [range]);
 
-    fetchSolves();
-  }, []);
+  const loadSummary = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.getDashboardSummary(range);
+      setSummary(data);
+    } catch (err) {
+      console.error('Failed to load dashboard:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const stats = {
-    lastSolve: solves[0]?.numMoves || 0,
-    bestSolve: solves.length > 0 ? Math.min(...solves.map(s => s.numMoves)) : 0,
-    totalSolves: solves.length,
+  const renderSimpleChart = () => {
+    if (!summary || summary.trend.daily.length === 0) return null;
+
+    const data = summary.trend.daily;
+    const maxCount = Math.max(...data.map((d) => d.count));
+
+    return (
+      <div className="mt-6">
+        <h3 className="text-sm font-medium text-slate-400 mb-4">Daily Trend</h3>
+        <div className="space-y-2">
+          {data.map((day, idx) => {
+            const heightPercent = maxCount > 0 ? (day.count / maxCount) * 100 : 0;
+            return (
+              <div key={idx} className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 w-20">
+                  {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+                <div className="flex-1 bg-slate-800 rounded-full h-6 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-full flex items-center px-2"
+                    style={{ width: `${Math.max(heightPercent, 5)}%` }}
+                  >
+                    <span className="text-xs font-medium">{day.count}</span>
+                  </div>
+                </div>
+                {day.avgMs && (
+                  <span className="text-xs text-slate-400 w-16 text-right">{formatMs(day.avgMs)}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="animate-fade-in">
       <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold mb-2">
-          Welcome back, {user?.name}
-        </h1>
-        <p className="text-slate-400">Ready to solve some cubes?</p>
+        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Welcome back, {user?.name}</h1>
+        <p className="text-slate-400">Here's your solving progress</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card hover className="animate-scale-in" style={{ animationDelay: '0ms' }}>
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-slate-400 mb-1">Last Solve</p>
-              <p className="text-3xl font-semibold">
-                {loading ? '-' : stats.lastSolve > 0 ? `${stats.lastSolve}` : '-'}
-              </p>
-              <p className="text-sm text-slate-500 mt-1">moves</p>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
+      <div className="mb-6">
+        <Select
+          label="Time Range"
+          options={[
+            { value: '7d', label: 'Last 7 days' },
+            { value: '30d', label: 'Last 30 days' },
+            { value: '90d', label: 'Last 90 days' },
+          ]}
+          value={range}
+          onChange={(e) => setRange(e.target.value)}
+          className="max-w-xs"
+        />
+      </div>
+
+      {loading ? (
+        <Card>
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
           </div>
         </Card>
-
-        <Card hover className="animate-scale-in" style={{ animationDelay: '100ms' }}>
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-slate-400 mb-1">Best Solve</p>
-              <p className="text-3xl font-semibold">
-                {loading ? '-' : stats.bestSolve > 0 ? `${stats.bestSolve}` : '-'}
-              </p>
-              <p className="text-sm text-slate-500 mt-1">moves</p>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </Card>
-
-        <Card hover className="animate-scale-in" style={{ animationDelay: '200ms' }}>
-          <div className="flex items-start justify-between">
-            <div>
+      ) : summary ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card hover className="animate-scale-in">
               <p className="text-sm text-slate-400 mb-1">Total Solves</p>
-              <p className="text-3xl font-semibold">
-                {loading ? '-' : stats.totalSolves}
-              </p>
-              <p className="text-sm text-slate-500 mt-1">completed</p>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            </div>
-          </div>
-        </Card>
-      </div>
+              <p className="text-3xl font-semibold">{summary.counts.solves}</p>
+              <div className="mt-2 text-sm text-slate-500">
+                DNF: {summary.counts.dnf} • +2: {summary.counts.plus2}
+              </div>
+            </Card>
 
-      {solves.length > 0 && (
-        <Card className="mb-8 animate-fade-in" style={{ animationDelay: '300ms' }}>
-          <h2 className="text-xl font-semibold mb-4">Your Last Solve</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Moves</span>
-              <Badge variant="info">{solves[0].numMoves} moves</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Date</span>
-              <span className="text-slate-300">
-                {new Date(solves[0].createdAt).toLocaleDateString()}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Source</span>
-              <Badge variant="default">{solves[0].source}</Badge>
-            </div>
-            <div className="mt-4 p-4 bg-slate-950/50 rounded-lg">
-              <p className="text-xs text-slate-500 mb-2">Solution</p>
-              <code className="text-sm text-slate-300 font-mono break-all">
-                {solves[0].moves}
-              </code>
-            </div>
+            <Card hover className="animate-scale-in" style={{ animationDelay: '100ms' }}>
+              <p className="text-sm text-slate-400 mb-1">Best Time</p>
+              <p className="text-3xl font-semibold">{formatMs(summary.timeStats.bestMs)}</p>
+              <p className="text-sm text-slate-500 mt-2">Worst: {formatMs(summary.timeStats.worstMs)}</p>
+            </Card>
+
+            <Card hover className="animate-scale-in" style={{ animationDelay: '200ms' }}>
+              <p className="text-sm text-slate-400 mb-1">Average</p>
+              <p className="text-3xl font-semibold">{formatMs(summary.timeStats.avgMs)}</p>
+              <p className="text-sm text-slate-500 mt-2">
+                Ao5: {formatMs(summary.timeStats.ao5Ms)} • Ao12: {formatMs(summary.timeStats.ao12Ms)}
+              </p>
+            </Card>
           </div>
+
+          {summary.scoreStats.avgScore !== null && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <Card hover>
+                <p className="text-sm text-slate-400 mb-1">Average Score</p>
+                <p className="text-3xl font-semibold">{summary.scoreStats.avgScore.toFixed(2)}</p>
+              </Card>
+              <Card hover>
+                <p className="text-sm text-slate-400 mb-1">Best Score</p>
+                <p className="text-3xl font-semibold">
+                  {summary.scoreStats.bestScore?.toFixed(2) || '-'}
+                </p>
+              </Card>
+            </div>
+          )}
+
+          <Card className="mb-8">{renderSimpleChart()}</Card>
+
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button variant="primary" onClick={() => navigate('/solve')} className="flex-1">
+              Start Timer
+            </Button>
+            <Button variant="secondary" onClick={() => navigate('/history')} className="flex-1">
+              View History
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Card className="text-center py-16">
+          <p className="text-slate-400">No data available for this time range</p>
         </Card>
       )}
-
-      <div className="flex flex-col sm:flex-row gap-4">
-        <Button
-          variant="primary"
-          onClick={() => navigate('/solve')}
-          className="flex-1"
-        >
-          Solve a new cube
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => navigate('/history')}
-          className="flex-1"
-        >
-          View solve history
-        </Button>
-      </div>
     </div>
   );
 };

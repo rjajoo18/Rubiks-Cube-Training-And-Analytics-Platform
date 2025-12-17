@@ -1,199 +1,396 @@
-import React, { useState } from 'react';
-import { solveCube, SolveResponse } from '@/lib/api';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { apiClient } from '@/api/client';
+import { Solve, LiveStats } from '@/types/api';
+import { formatDisplayTime, formatMs } from '@/utils/time';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Input } from '@/components/ui/Input';
 
-const COLORS = ['W', 'Y', 'R', 'O', 'B', 'G'];
-const COLOR_CLASSES = {
-  W: 'bg-cube-white text-black',
-  Y: 'bg-cube-yellow text-black',
-  R: 'bg-cube-red text-white',
-  O: 'bg-cube-orange text-white',
-  B: 'bg-cube-blue text-white',
-  G: 'bg-cube-green text-white',
-};
-
-const FACE_NAMES = ['Front', 'Back', 'Left', 'Right', 'Top', 'Bottom'];
+type TimerState = 'idle' | 'ready' | 'running' | 'stopped';
 
 export const SolverPage: React.FC = () => {
-  const [cubeState, setCubeState] = useState<string[]>(
-    Array(54).fill('W')
-  );
-  const [solution, setSolution] = useState<SolveResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [scramble, setScramble] = useState<string>('');
+  const [timerState, setTimerState] = useState<TimerState>('idle');
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [lastSolve, setLastSolve] = useState<Solve | null>(null);
+  const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
+  const [penalty, setPenalty] = useState<string>('OK');
+  const [notes, setNotes] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
 
-  const handleStickerClick = (index: number) => {
-    const currentColorIndex = COLORS.indexOf(cubeState[index]);
-    const nextColorIndex = (currentColorIndex + 1) % COLORS.length;
-    const newState = [...cubeState];
-    newState[index] = COLORS[nextColorIndex];
-    setCubeState(newState);
-  };
+  // Refs so keyboard handlers always see the latest values (no stale closures)
+  const startTimeRef = useRef<number>(0);
+  const animationFrameRef = useRef<number>(0);
+  const spaceDownTimeRef = useRef<number>(0);
 
-  const validateCubeState = (state: string[]): string | null => {
-    if (state.length !== 54) {
-      return 'Invalid cube state: must have exactly 54 stickers';
-    }
+  const timerStateRef = useRef<TimerState>('idle');
+  const loadingRef = useRef<boolean>(false);
 
-    const colorCounts: Record<string, number> = {};
-    state.forEach(color => {
-      colorCounts[color] = (colorCounts[color] || 0) + 1;
-    });
+  useEffect(() => {
+    timerStateRef.current = timerState;
+  }, [timerState]);
 
-    for (const color of COLORS) {
-      if (colorCounts[color] !== 9) {
-        return `Invalid cube state: each color must appear exactly 9 times (${color} appears ${colorCounts[color] || 0} times)`;
-      }
-    }
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
-    return null;
-  };
-
-  const handleSolve = async () => {
-    setError('');
-    setLoading(true);
-    setSolution(null);
-
-    const validationError = validateCubeState(cubeState);
-    if (validationError) {
-      setError(validationError);
-      setLoading(false);
-      return;
-    }
-
+  const loadNewScramble = useCallback(async () => {
     try {
-      const stateString = cubeState.join('');
-      const result = await solveCube(stateString, 'manual');
-      setSolution(result);
-    } 
-    catch (err: unknown) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const response = (err as { response?: { data?: { error?: string; message?: string } } }).response;
-        const msg = response?.data?.error || response?.data?.message;
-        setError(msg || 'Failed to solve cube. Please check your input.');
-      } else {
-        setError('Failed to solve cube. Please check your input.');
+      const data = await apiClient.getScramble('3x3');
+      setScramble(data.scramble);
+    } catch {
+      setError('Failed to load scramble');
+    }
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const stats = await apiClient.getLiveStats('3x3');
+      setLiveStats(stats);
+    } catch (err) {
+      console.error('Failed to load stats:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNewScramble();
+    void loadStats();
+  }, [loadNewScramble, loadStats]);
+
+  const saveSolve = useCallback(
+    async (timeMs: number) => {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await apiClient.createSolve({
+          scramble,
+          timeMs,
+          penalty: penalty === 'OK' ? null : penalty,
+          source: 'timer',
+          notes: notes || undefined,
+          event: '3x3',
+        });
+
+        setLastSolve(response.solve);
+        setLiveStats(response.liveStats);
+        setNotes('');
+        setPenalty('OK');
+
+        await loadNewScramble();
+      } catch {
+        setError('Failed to save solve');
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
+    },
+    [scramble, penalty, notes, loadNewScramble]
+  );
+
+  const startTimer = useCallback(() => {
+    if (loadingRef.current) return;
+
+    // stop any existing loop
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = 0;
+    }
+
+    startTimeRef.current = performance.now();
+    setTimerState('running');
+    setCurrentTime(0);
+
+    const tick = () => {
+      const elapsed = performance.now() - startTimeRef.current;
+      setCurrentTime(Math.floor(elapsed));
+      animationFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = 0;
+    }
+
+    const finalTime = performance.now() - startTimeRef.current;
+    setCurrentTime(finalTime);
+    setTimerState('stopped');
+
+    void saveSolve(Math.floor(finalTime));
+  }, [saveSolve]);
+
+  const handleSpaceDown = useCallback(() => {
+    if (loadingRef.current) return;
+
+    const state = timerStateRef.current;
+    if (state === 'idle') {
+      spaceDownTimeRef.current = Date.now();
+      setTimerState('ready');
+    } else if (state === 'running') {
+      stopTimer();
+    }
+  }, [stopTimer]);
+
+  const handleSpaceUp = useCallback(() => {
+    if (loadingRef.current) return;
+
+    const state = timerStateRef.current;
+    if (state === 'ready') {
+      const holdTime = Date.now() - spaceDownTimeRef.current;
+      if (holdTime >= 300) {
+        startTimer();
+      } else {
+        setTimerState('idle');
+      }
+    }
+  }, [startTimer]);
+
+  // IMPORTANT: register key listeners ONCE. Do NOT cancel RAF here.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleSpaceDown();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleSpaceUp();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleSpaceDown, handleSpaceUp]);
+
+  // Optional: cancel RAF only when leaving the page
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = 0;
+      }
+    };
+  }, []);
+
+  const handleManualStart = () => {
+    if (loading) return;
+
+    if (timerState === 'idle') {
+      startTimer();
+    } else if (timerState === 'running') {
+      stopTimer();
     }
   };
 
-  const handleReset = () => {
-    setCubeState(Array(54).fill('W'));
-    setSolution(null);
-    setError('');
+  const handleScoreSolve = async (solveId: number) => {
+    try {
+      const result = await apiClient.scoreSolve(solveId);
+      setLastSolve((prev) =>
+        prev && prev.id === solveId
+          ? { ...prev, mlScore: result.mlScore, scoreVersion: result.scoreVersion }
+          : prev
+      );
+    } catch {
+      setError('Failed to score solve');
+    }
   };
 
-  const renderFace = (faceIndex: number) => {
-    const startIndex = faceIndex * 9;
-    return (
-      <div className="space-y-2">
-        <p className="text-xs text-slate-400 text-center">{FACE_NAMES[faceIndex]}</p>
-        <div className="grid grid-cols-3 gap-1">
-          {Array.from({ length: 9 }).map((_, i) => {
-            const index = startIndex + i;
-            const color = cubeState[index];
-            return (
-              <button
-                key={index}
-                onClick={() => handleStickerClick(index)}
-                className={`w-10 h-10 rounded border-2 border-slate-700 ${COLOR_CLASSES[color as keyof typeof COLOR_CLASSES]} hover:opacity-80 transition-opacity duration-150 font-mono text-xs font-bold`}
-              >
-                {color}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
+  const getTimerColor = () => {
+    if (timerState === 'ready') return 'text-green-400';
+    if (timerState === 'running') return 'text-white';
+    if (timerState === 'stopped') return 'text-blue-400';
+    return 'text-slate-400';
   };
+
+  const showSavingBanner = loading && timerState === 'stopped';
 
   return (
     <div className="animate-fade-in">
       <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Cube Solver</h1>
-        <p className="text-slate-400">Input your cube state and get the solution</p>
+        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Timer</h1>
+        <p className="text-slate-400">Press and hold spacebar to start</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card className="animate-scale-in">
-          <h2 className="text-xl font-semibold mb-4">Cube Input</h2>
-          <p className="text-sm text-slate-400 mb-6">
-            Click each sticker to cycle through colors: W (White), Y (Yellow), R (Red), O (Orange), B (Blue), G (Green)
-          </p>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 mb-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i}>{renderFace(i)}</div>
-            ))}
-          </div>
-
-          <div className="flex gap-4">
-            <Button
-              variant="primary"
-              onClick={handleSolve}
-              loading={loading}
-              className="flex-1"
-            >
-              Solve Cube
-            </Button>
-            <Button variant="secondary" onClick={handleReset}>
-              Reset
-            </Button>
-          </div>
+      {error && (
+        <Card className="bg-red-900/20 border-red-800 mb-6">
+          <p className="text-red-400">{error}</p>
         </Card>
+      )}
 
-        <div className="space-y-6">
-          {error && (
-            <Card className="bg-red-900/20 border-red-800 animate-scale-in">
-              <p className="text-red-400">{error}</p>
-            </Card>
-          )}
+      {showSavingBanner && (
+        <Card className="mb-6">
+          <p className="text-slate-300">Saving solve...</p>
+        </Card>
+      )}
 
-          {solution && (
-            <Card className="animate-scale-in">
-              <h2 className="text-xl font-semibold mb-4">Solution</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="text-center">
+            <div className="mb-6">
+              <p className="text-sm text-slate-400 mb-2">Scramble</p>
+              <p className="text-lg md:text-xl font-mono text-slate-200">{scramble}</p>
+              <Button
+                variant="ghost"
+                onClick={loadNewScramble}
+                className="mt-3"
+                disabled={timerState === 'running' || loading}
+              >
+                {loading ? 'Saving...' : 'New Scramble'}
+              </Button>
+            </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Badge variant="info">{solution.numMoves} moves</Badge>
-                  <span className="text-sm text-slate-400">
-                    {new Date().toLocaleDateString()}
-                  </span>
+            <div className={`text-6xl md:text-8xl font-bold mb-6 transition-colors ${getTimerColor()}`}>
+              {formatMs(currentTime)}
+            </div>
+
+            <div className="flex justify-center gap-3 mb-6">
+              <Button
+                variant={timerState === 'running' ? 'secondary' : 'primary'}
+                onClick={handleManualStart}
+                disabled={timerState === 'stopped' || loading}
+              >
+                {timerState === 'running' ? 'Stop' : 'Start'}
+              </Button>
+
+              {timerState === 'stopped' && (
+                <Button variant="ghost" onClick={() => setTimerState('idle')} disabled={loading}>
+                  Reset
+                </Button>
+              )}
+            </div>
+
+            {timerState === 'stopped' && (
+              <div className="space-y-4 pt-4 border-t border-white/5">
+                <div className="grid grid-cols-3 gap-3">
+                  <Button
+                    variant={penalty === 'OK' ? 'primary' : 'ghost'}
+                    onClick={() => setPenalty('OK')}
+                    disabled={loading}
+                  >
+                    OK
+                  </Button>
+                  <Button
+                    variant={penalty === '+2' ? 'primary' : 'ghost'}
+                    onClick={() => setPenalty('+2')}
+                    disabled={loading}
+                  >
+                    +2
+                  </Button>
+                  <Button
+                    variant={penalty === 'DNF' ? 'primary' : 'ghost'}
+                    onClick={() => setPenalty('DNF')}
+                    disabled={loading}
+                  >
+                    DNF
+                  </Button>
                 </div>
 
-                <div className="p-4 bg-slate-950/50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-2">Move Sequence</p>
-                  <code className="text-base text-slate-100 font-mono break-all leading-relaxed">
-                    {solution.moves}
-                  </code>
+                <Input
+                  placeholder="Notes (optional)"
+                  value={notes}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            )}
+          </Card>
+
+          {lastSolve && (
+            <Card>
+              <h3 className="text-lg font-semibold mb-4">Last Solve</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Time</span>
+                  <Badge variant="info">{formatDisplayTime(lastSolve.timeMs, lastSolve.penalty)}</Badge>
                 </div>
 
-                <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
-                  <p className="text-sm text-blue-300">
-                    <span className="font-semibold">Note:</span> Follow the move sequence from left to right. 
-                    Standard notation: U (Up), D (Down), L (Left), R (Right), F (Front), B (Back). 
-                    ' means counter-clockwise, 2 means 180 degrees.
-                  </p>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Date</span>
+                  <span className="text-sm">{new Date(lastSolve.createdAt).toLocaleString()}</span>
                 </div>
+
+                {lastSolve.mlScore !== null && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Score</span>
+                    <Badge variant="success">{lastSolve.mlScore.toFixed(2)}</Badge>
+                  </div>
+                )}
+
+                {lastSolve.mlScore === null && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleScoreSolve(lastSolve.id)}
+                    className="w-full"
+                    disabled={loading}
+                  >
+                    Score This Solve
+                  </Button>
+                )}
               </div>
             </Card>
           )}
+        </div>
 
-          {!solution && !error && (
-            <Card className="text-center py-12 animate-fade-in">
-              <div className="w-16 h-16 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-2xl mx-auto mb-4 opacity-50"></div>
-              <p className="text-slate-400">
-                Configure your cube and click "Solve Cube" to see the solution
-              </p>
-            </Card>
-          )}
+        <div className="space-y-6">
+          <Card>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Live Stats</h3>
+              <Button variant="ghost" onClick={loadStats} className="text-xs" disabled={loading}>
+                Refresh
+              </Button>
+            </div>
+
+            {liveStats && (
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Count</span>
+                  <span>{liveStats.count}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Best</span>
+                  <span>{formatMs(liveStats.bestMs)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Worst</span>
+                  <span>{formatMs(liveStats.worstMs)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Ao5</span>
+                  <span>{formatMs(liveStats.ao5Ms)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Ao12</span>
+                  <span>{formatMs(liveStats.ao12Ms)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Average</span>
+                  <span>{formatMs(liveStats.avgMs)}</span>
+                </div>
+                {liveStats.avgScore !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Avg Score</span>
+                    <span>{liveStats.avgScore.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
     </div>
   );
 };
+
 export default SolverPage;

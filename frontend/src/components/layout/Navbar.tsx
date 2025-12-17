@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
+import logo from "@/assets/logo.jpg";
+
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -38,9 +40,13 @@ export const Navbar: React.FC = () => {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-lg transform group-hover:rotate-12 transition-transform duration-200" />
-              <span className="text-xl font-bold">CubeIQ</span>
+              <img
+                src={logo}
+                alt="CubeIQ logo"
+                className="w-8 h-8 rounded-lg object-cover transform group-hover:rotate-12 transition-transform duration-200"
+              />
             </Link>
+
 
             {user && (
               <div className="hidden md:flex items-center gap-6">
