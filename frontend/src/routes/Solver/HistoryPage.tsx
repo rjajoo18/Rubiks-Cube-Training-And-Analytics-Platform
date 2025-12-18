@@ -39,7 +39,7 @@ export const HistoryPage: React.FC = () => {
   });
 
   useEffect(() => {
-    loadSolves(true);
+    void loadSolves(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
@@ -57,11 +57,8 @@ export const HistoryPage: React.FC = () => {
 
       const data = await apiClient.getSolves(params);
 
-      if (reset) {
-        setSolves(data.items);
-      } else {
-        setSolves((prev) => [...prev, ...data.items]);
-      }
+      if (reset) setSolves(data.items);
+      else setSolves((prev) => [...prev, ...data.items]);
 
       setNextCursor(data.nextCursor);
     } catch (err) {
@@ -140,146 +137,175 @@ export const HistoryPage: React.FC = () => {
     });
   };
 
+  const formatSolutionMoves = (moves: Solve["solutionMoves"]): string => {
+    if (!moves || moves.length === 0) return "";
+    return moves.join(" ");
+  };
+
   if (loading && solves.length === 0) {
     return (
-      <div className="animate-fade-in">
-        <h1 className="text-3xl md:text-4xl font-semibold mb-8">History</h1>
-        <Card>
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      <div className="min-h-screen bg-background">
+        <main className="max-w-7xl mx-auto px-4 py-6">
+          <div className="space-y-6 animate-fade-in">
+            <div className="mb-8">
+              <h1 className="text-3xl md:text-4xl font-bold mb-2">History</h1>
+              <p className="text-muted-foreground">Your solving journey</p>
+            </div>
+            <Card className="border border-border/50">
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              </div>
+            </Card>
           </div>
-        </Card>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold mb-2">History</h1>
-        <p className="text-slate-400">{solves.length} solves loaded</p>
-      </div>
-
-      <Card className="mb-6">
-        <h3 className="text-lg font-semibold mb-4">Filters</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Select
-            label="Penalty"
-            options={[
-              { value: "", label: "All" },
-              { value: "OK", label: "OK" },
-              { value: "+2", label: "+2" },
-              { value: "DNF", label: "DNF" },
-            ]}
-            value={filters.penalty}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setFilters({ ...filters, penalty: e.target.value })
-            }
-          />
-          <Select
-            label="Source"
-            options={[
-              { value: "", label: "All" },
-              { value: "timer", label: "Timer" },
-              { value: "manual", label: "Manual" },
-            ]}
-            value={filters.source}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setFilters({ ...filters, source: e.target.value })
-            }
-          />
-          <div className="flex items-end gap-2">
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={filters.hasScore}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setFilters({ ...filters, hasScore: e.target.checked })
-                }
-                className="rounded"
-              />
-              Has Score
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={filters.hasSolution}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setFilters({ ...filters, hasSolution: e.target.checked })
-                }
-                className="rounded"
-              />
-              Has Solution
-            </label>
-          </div>
-        </div>
-      </Card>
-
-      {solves.length === 0 ? (
-        <Card className="text-center py-16">
-          <div className="w-16 h-16 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-2xl mx-auto mb-4 opacity-30" />
-          <h2 className="text-xl font-semibold mb-2">No solves found</h2>
-          <p className="text-slate-400">Try adjusting your filters or solve a new cube!</p>
-        </Card>
-      ) : (
-        <>
-          <div className="space-y-4 mb-6">
-            {solves.map((solve, index) => (
-              <Card
-                key={solve.id}
-                hover
-                className="animate-scale-in cursor-pointer"
-                style={{ animationDelay: `${index * 30}ms` }}
-                onClick={() => handleViewDetails(solve)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="hidden sm:block w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <Badge variant="info">{formatDisplayTime(solve.timeMs, solve.penalty)}</Badge>
-                        <Badge variant="default">{solve.source}</Badge>
-                        {solve.mlScore !== null && (
-                          <Badge variant="success">Score: {solve.mlScore.toFixed(2)}</Badge>
-                        )}
-                        {solve.numMoves && <Badge variant="info">{solve.numMoves} moves</Badge>}
-                      </div>
-                      <p className="text-sm text-slate-400">{formatDate(solve.createdAt)}</p>
-                      <p className="text-sm text-slate-500 mt-1 truncate">{solve.scramble}</p>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
+    <div className="min-h-screen bg-background">
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="space-y-6 animate-fade-in">
+          {/* Page Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">History</h1>
+            <p className="text-muted-foreground">
+              {solves.length} {solves.length === 1 ? "solve" : "solves"} loaded
+            </p>
           </div>
 
-          {nextCursor && (
-            <div className="text-center">
-              <Button variant="secondary" onClick={() => loadSolves(false)} disabled={loading}>
-                {loading ? "Loading..." : "Load More"}
-              </Button>
+          {/* Filters Card */}
+          <Card className="border border-border/50 bg-card/60 backdrop-blur">
+            <h3 className="text-lg font-semibold mb-4">Filters</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Select
+                label="Penalty"
+                options={[
+                  { value: "", label: "All" },
+                  { value: "OK", label: "OK" },
+                  { value: "+2", label: "+2" },
+                  { value: "DNF", label: "DNF" },
+                ]}
+                value={filters.penalty}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setFilters({ ...filters, penalty: e.target.value })
+                }
+              />
+              <Select
+                label="Source"
+                options={[
+                  { value: "", label: "All" },
+                  { value: "timer", label: "Timer" },
+                  { value: "manual", label: "Manual" },
+                ]}
+                value={filters.source}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setFilters({ ...filters, source: e.target.value })
+                }
+              />
+              <div className="flex flex-col gap-3">
+                <label className="text-sm font-medium text-foreground mb-2">Options</label>
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filters.hasScore}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setFilters({ ...filters, hasScore: e.target.checked })
+                    }
+                    className="rounded border-border"
+                  />
+                  Has Score
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filters.hasSolution}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setFilters({ ...filters, hasSolution: e.target.checked })
+                    }
+                    className="rounded border-border"
+                  />
+                  Has Solution
+                </label>
+              </div>
             </div>
+          </Card>
+
+          {solves.length === 0 ? (
+            <Card className="text-center py-16 border border-border/50 bg-card/60 backdrop-blur">
+              <div className="space-y-3">
+                <div className="w-16 h-16 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-2xl mx-auto opacity-30" />
+                <h2 className="text-xl font-semibold">No solves found</h2>
+                <p className="text-muted-foreground">Try adjusting your filters or solve a new cube!</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Solves List */}
+              <div className="space-y-4">
+                {solves.map((solve, index) => (
+                  <Card
+                    key={solve.id}
+                    hover
+                    className="animate-scale-in cursor-pointer border border-border/50 bg-card/60 backdrop-blur"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                    onClick={() => handleViewDetails(solve)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="hidden sm:block w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex-shrink-0" />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <Badge variant="info">{formatDisplayTime(solve.timeMs, solve.penalty)}</Badge>
+                          <Badge variant="default">{solve.source}</Badge>
+                          {solve.mlScore !== null && (
+                            <Badge variant="success">Score: {solve.mlScore.toFixed(2)}</Badge>
+                          )}
+                          {solve.numMoves !== null && solve.numMoves !== undefined && (
+                            <Badge variant="info">{solve.numMoves} moves</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-1">{formatDate(solve.createdAt)}</p>
+                        <p className="text-sm text-muted-foreground/70 truncate">{solve.scramble}</p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              {nextCursor && (
+                <div className="flex justify-center">
+                  <Button variant="secondary" onClick={() => void loadSolves(false)} disabled={loading}>
+                    {loading ? "Loading..." : "Load More"}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+      </main>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Solve Details">
         {selectedSolve && (
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-slate-400 mb-2">Time</p>
+              <p className="text-sm text-muted-foreground mb-2">Time</p>
               <Badge variant="info">{formatDisplayTime(selectedSolve.timeMs, selectedSolve.penalty)}</Badge>
             </div>
 
             <div>
-              <p className="text-sm text-slate-400 mb-2">Scramble</p>
-              <code className="text-sm text-slate-300 font-mono break-all">{selectedSolve.scramble}</code>
+              <p className="text-sm text-muted-foreground mb-2">Scramble</p>
+              <code className="text-sm text-foreground font-mono break-all bg-muted/50 px-3 py-2 rounded-lg block">
+                {selectedSolve.scramble}
+              </code>
             </div>
 
-            {selectedSolve.solutionMoves && (
+            {selectedSolve.solutionMoves && selectedSolve.solutionMoves.length > 0 && (
               <div>
-                <p className="text-sm text-slate-400 mb-2">Solution</p>
-                <code className="text-sm text-slate-300 font-mono break-all">{selectedSolve.solutionMoves}</code>
+                <p className="text-sm text-muted-foreground mb-2">Solution</p>
+                <code className="text-sm text-foreground font-mono break-all bg-muted/50 px-3 py-2 rounded-lg block">
+                  {formatSolutionMoves(selectedSolve.solutionMoves)}
+                </code>
               </div>
             )}
 
@@ -305,20 +331,20 @@ export const HistoryPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex gap-3">
-              <Button variant="primary" onClick={handleUpdateSolve} className="flex-1">
+            <div className="flex gap-3 pt-4 border-t border-border/50">
+              <Button variant="primary" onClick={() => void handleUpdateSolve()} className="flex-1">
                 Update
               </Button>
 
               {selectedSolve.mlScore === null && (
-                <Button variant="secondary" onClick={() => handleScoreSolve(selectedSolve.id)} className="flex-1">
+                <Button variant="secondary" onClick={() => void handleScoreSolve(selectedSolve.id)} className="flex-1">
                   Score
                 </Button>
               )}
 
               <Button
                 variant="ghost"
-                onClick={() => handleDeleteSolve(selectedSolve.id)}
+                onClick={() => void handleDeleteSolve(selectedSolve.id)}
                 className="text-red-400 hover:text-red-300"
               >
                 Delete

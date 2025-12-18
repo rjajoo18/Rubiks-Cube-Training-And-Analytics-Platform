@@ -1,12 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import {
-  User,
-  Solve,
-  LiveStats,
-  DashboardSummary,
-  Scramble,
-  PaginatedSolves,
-} from '@/types/api';
+import { User, Solve, LiveStats, DashboardSummary, Scramble, PaginatedSolves } from '@/types/api';
 
 class APIClient {
   private client: AxiosInstance;
@@ -52,7 +45,7 @@ class APIClient {
     return response.data;
   }
 
-  // Scramble endpoint
+  // Scramble endpoint (NOW RETURNS state)
   async getScramble(event: string = '3x3'): Promise<Scramble> {
     const response = await this.client.get('/scramble', { params: { event } });
     return response.data;
@@ -66,6 +59,10 @@ class APIClient {
     source?: string;
     notes?: string;
     event?: string;
+    state?: string;
+    solutionMoves?: string[];
+    numMoves?: number;
+    tags?: string[];
   }): Promise<{ solve: Solve; liveStats: LiveStats }> {
     const response = await this.client.post('/solves', data);
     return response.data;
@@ -114,6 +111,15 @@ class APIClient {
 
   async scoreSolve(id: number): Promise<{ mlScore: number; scoreVersion: string }> {
     const response = await this.client.post(`/solves/${id}/score`);
+    return response.data;
+  }
+
+  // Compute optimal solution WITHOUT saving
+  async getOptimalSolution(data: {
+    state: string;   // 54 chars, URFDLB
+    event?: string;  // "3x3"
+  }): Promise<{ solutionMoves: string[]; numMoves: number }> {
+    const response = await this.client.post('/solves/optimal', data);
     return response.data;
   }
 

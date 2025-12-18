@@ -68,89 +68,145 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Welcome back, {user?.name}</h1>
-        <p className="text-slate-400">Here's your solving progress</p>
-      </div>
-
-      <div className="mb-6">
-        <Select
-          label="Time Range"
-          options={[
-            { value: '7d', label: 'Last 7 days' },
-            { value: '30d', label: 'Last 30 days' },
-            { value: '90d', label: 'Last 90 days' },
-          ]}
-          value={range}
-          onChange={(e) => setRange(e.target.value)}
-          className="max-w-xs"
-        />
-      </div>
-
-      {loading ? (
-        <Card>
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+    <div className="min-h-screen bg-background">
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="space-y-6 animate-fade-in">
+          {/* Page Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">
+              Welcome back, {user?.name}
+            </h1>
+            <p className="text-muted-foreground">Here's your solving progress</p>
           </div>
-        </Card>
-      ) : summary ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card hover className="animate-scale-in">
-              <p className="text-sm text-slate-400 mb-1">Total Solves</p>
-              <p className="text-3xl font-semibold">{summary.counts.solves}</p>
-              <div className="mt-2 text-sm text-slate-500">
-                DNF: {summary.counts.dnf} • +2: {summary.counts.plus2}
+
+          {/* Time Range Selector */}
+          <div className="flex items-center justify-between">
+            <div className="w-full max-w-xs">
+              <Select
+                label="Time Range"
+                options={[
+                  { value: '7d', label: 'Last 7 days' },
+                  { value: '30d', label: 'Last 30 days' },
+                  { value: '90d', label: 'Last 90 days' },
+                ]}
+                value={range}
+                onChange={(e) => setRange(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <Card className="border border-border/50">
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
               </div>
             </Card>
+          ) : summary ? (
+            <>
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card 
+                  hover 
+                  className="animate-scale-in border border-border/50 bg-card/60 backdrop-blur"
+                >
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Total Solves</p>
+                    <p className="text-3xl font-bold">{summary.counts.solves}</p>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground pt-2 border-t border-border/50">
+                      <span>DNF: {summary.counts.dnf}</span>
+                      <span>•</span>
+                      <span>+2: {summary.counts.plus2}</span>
+                    </div>
+                  </div>
+                </Card>
 
-            <Card hover className="animate-scale-in" style={{ animationDelay: '100ms' }}>
-              <p className="text-sm text-slate-400 mb-1">Best Time</p>
-              <p className="text-3xl font-semibold">{formatMs(summary.timeStats.bestMs)}</p>
-              <p className="text-sm text-slate-500 mt-2">Worst: {formatMs(summary.timeStats.worstMs)}</p>
-            </Card>
+                <Card 
+                  hover 
+                  className="animate-scale-in border border-border/50 bg-card/60 backdrop-blur"
+                  style={{ animationDelay: '100ms' }}
+                >
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Best Time</p>
+                    <p className="text-3xl font-bold">{formatMs(summary.timeStats.bestMs)}</p>
+                    <p className="text-sm text-muted-foreground pt-2 border-t border-border/50">
+                      Worst: {formatMs(summary.timeStats.worstMs)}
+                    </p>
+                  </div>
+                </Card>
 
-            <Card hover className="animate-scale-in" style={{ animationDelay: '200ms' }}>
-              <p className="text-sm text-slate-400 mb-1">Average</p>
-              <p className="text-3xl font-semibold">{formatMs(summary.timeStats.avgMs)}</p>
-              <p className="text-sm text-slate-500 mt-2">
-                Ao5: {formatMs(summary.timeStats.ao5Ms)} • Ao12: {formatMs(summary.timeStats.ao12Ms)}
-              </p>
-            </Card>
-          </div>
+                <Card 
+                  hover 
+                  className="animate-scale-in border border-border/50 bg-card/60 backdrop-blur"
+                  style={{ animationDelay: '200ms' }}
+                >
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Average</p>
+                    <p className="text-3xl font-bold">{formatMs(summary.timeStats.avgMs)}</p>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground pt-2 border-t border-border/50">
+                      <span>Ao5: {formatMs(summary.timeStats.ao5Ms)}</span>
+                      <span>•</span>
+                      <span>Ao12: {formatMs(summary.timeStats.ao12Ms)}</span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
 
-          {summary.scoreStats.avgScore !== null && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <Card hover>
-                <p className="text-sm text-slate-400 mb-1">Average Score</p>
-                <p className="text-3xl font-semibold">{summary.scoreStats.avgScore.toFixed(2)}</p>
+              {/* Score Stats (if available) */}
+              {summary.scoreStats.avgScore !== null && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card hover className="border border-border/50 bg-card/60 backdrop-blur">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Average Score</p>
+                      <p className="text-3xl font-bold">{summary.scoreStats.avgScore.toFixed(2)}</p>
+                    </div>
+                  </Card>
+                  <Card hover className="border border-border/50 bg-card/60 backdrop-blur">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Best Score</p>
+                      <p className="text-3xl font-bold">
+                        {summary.scoreStats.bestScore?.toFixed(2) || '—'}
+                      </p>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* Chart Card */}
+              <Card className="border border-border/50 bg-card/60 backdrop-blur">
+                {renderSimpleChart()}
               </Card>
-              <Card hover>
-                <p className="text-sm text-slate-400 mb-1">Best Score</p>
-                <p className="text-3xl font-semibold">
-                  {summary.scoreStats.bestScore?.toFixed(2) || '-'}
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button 
+                  variant="primary" 
+                  onClick={() => navigate('/solve')}
+                  className="w-full"
+                >
+                  Start Timer
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => navigate('/history')}
+                  className="w-full"
+                >
+                  View History
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Card className="text-center py-16 border border-border/50 bg-card/60 backdrop-blur">
+              <div className="space-y-3">
+                <div className="w-16 h-16 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-2xl mx-auto opacity-30" />
+                <h2 className="text-xl font-semibold">No data available</h2>
+                <p className="text-muted-foreground">
+                  No solves found for this time range
                 </p>
-              </Card>
-            </div>
+              </div>
+            </Card>
           )}
-
-          <Card className="mb-8">{renderSimpleChart()}</Card>
-
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button variant="primary" onClick={() => navigate('/solve')} className="flex-1">
-              Start Timer
-            </Button>
-            <Button variant="secondary" onClick={() => navigate('/history')} className="flex-1">
-              View History
-            </Button>
-          </div>
-        </>
-      ) : (
-        <Card className="text-center py-16">
-          <p className="text-slate-400">No data available for this time range</p>
-        </Card>
-      )}
+        </div>
+      </main>
     </div>
   );
 };

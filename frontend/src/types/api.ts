@@ -14,13 +14,14 @@ export interface Solve {
   notes: string | null;
   tags: string[] | null;
   state: string | null;
-  solutionMoves: string | null;
+  solutionMoves: string[] | null; // FIXED
   numMoves: number | null;
   mlScore: number | null;
   scoreVersion: string | null;
   source: string;
   createdAt: string;
 }
+
 
 export interface LiveStats {
   count: number;
@@ -63,6 +64,7 @@ export interface DashboardSummary {
 export interface Scramble {
   scramble: string;
   event: string;
+  state: string;
 }
 
 export interface PaginatedSolves {

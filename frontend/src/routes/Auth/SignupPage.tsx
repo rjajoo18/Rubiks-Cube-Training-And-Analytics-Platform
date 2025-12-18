@@ -4,17 +4,19 @@ import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import logo from '@/assets/logo.jpg';
 
 export const SignupPage: React.FC = () => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+
   const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -35,60 +37,88 @@ export const SignupPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <Card className="w-full max-w-md animate-scale-in">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-lg mx-auto mb-4"></div>
-          <h1 className="text-3xl font-semibold mb-2">Create an account</h1>
-          <p className="text-slate-400">Start solving Rubik's cubes today</p>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md">
+        <div className="relative">
+          {/* Subtle glow effect behind card */}
+          <div className="pointer-events-none absolute -inset-[1px] rounded-[1.75rem] bg-gradient-to-r from-cube-red/20 via-cube-blue/20 to-cube-green/20 blur opacity-60" />
+
+          <Card className="relative rounded-[1.75rem] border border-border/70 shadow-2xl backdrop-blur animate-scale-in p-8">
+            {/* Header */}
+            <div className="flex flex-col items-center text-center mb-6">
+              <img
+                src={logo}
+                alt="CubeIQ logo"
+                className="w-12 h-12 rounded-xl object-cover mb-3"
+              />
+              <h1 className="text-2xl font-semibold">Create your account</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Track solves, stats, and improvement over time.
+              </p>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <Input
+                label="Name"
+                type="text"
+                value={name}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+                placeholder="John Doe"
+                autoComplete="name"
+                required
+              />
+
+              <Input
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+
+              <Input
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                required
+              />
+
+              <Button type="submit" variant="primary" loading={loading} className="w-full mt-2">
+                Create account
+              </Button>
+            </form>
+
+            {/* Footer */}
+            <div className="mt-6 pt-6 border-t border-border/50">
+              <p className="text-center text-sm text-muted-foreground">
+                Already have an account?{' '}
+                <Link to="/login" className="font-medium text-primary hover:underline transition-colors">
+                  Sign in
+                </Link>
+              </p>
+            </div>
+          </Card>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          <Input
-            label="Name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="John Doe"
-            required
-          />
-
-          <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-          />
-
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-
-          <Button type="submit" variant="primary" loading={loading} className="w-full">
-            Create account
-          </Button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-400">
-          Already have an account?{' '}
-          <Link to="/login" className="text-blue-400 hover:text-blue-300 transition-colors duration-150">
-            Sign in
-          </Link>
-        </p>
-      </Card>
+        {/* Additional info */}
+        <Card className="mt-4 border border-border/50 bg-card/70 p-4 backdrop-blur">
+          <p className="text-xs text-center text-muted-foreground">
+            By creating an account, you agree to our Terms of Service and Privacy Policy.
+          </p>
+        </Card>
+      </div>
     </div>
   );
 };

@@ -7,6 +7,7 @@ import base64
 from db import db
 from models import Solve
 from auth import require_auth
+import pycuber as pc
 
 # Kociemba is a fast 2-phase Rubik's Cube solver.
 # It expects a 54-character cube string in "facelet" form (URFDLB order),
@@ -97,6 +98,185 @@ def validate_cube_state_basic(state: str):
         return False, f"each color must appear exactly 9 times (bad counts: {bad})"
 
     return True, None
+
+def scramble_to_state_urfdlb(scramble: str) -> str:
+    """
+    Apply a WCA-style scramble to a solved cube (using pycuber),
+    then convert to the 54-char URFDLB facelet string that kociemba expects.
+    """
+    cube = pc.Cube()
+    cube(scramble)  # apply scramble
+
+    faces = ["U", "R", "F", "D", "L", "B"]  # URFDLB order
+
+    # Map actual colors -> face letters based on centers (so output is U/R/F/D/L/B)
+    center_color_to_face = {}
+    for f in faces:
+        center = cube.get_face(f)[1][1]
+        center_color_to_face[str(center)] = f
+
+    out = []
+    for f in faces:
+        face = cube.get_face(f)
+        for r in range(3):
+            for c in range(3):
+                color = str(face[r][c])
+                out.append(center_color_to_face[color])
+
+    return "".join(out)
+
+# ----------------------------
+# SCRAMBLE -> STATE (URFDLB)
+# ----------------------------
+
+# Face order / facelet indices match kociemba expectations (URFDLB)
+FACES = ["U", "R", "F", "D", "L", "B"]
+
+def _build_facelet_index_maps():
+    """
+    Build mapping between:
+      - facelet index (0..53) <-> (pos, normal) on cube
+    pos and normal are integer 3D vectors in {-1,0,1}.
+    """
+    idx_to_key = {}
+    key_to_idx = {}
+
+    def add(face, r, c, x, y, z, nx, ny, nz, idx):
+        key = (x, y, z, nx, ny, nz)
+        idx_to_key[idx] = key
+        key_to_idx[key] = idx
+
+    # U: y=+1, rows z=-1..+1, cols x=-1..+1
+    idx = 0
+    for r, z in enumerate([-1, 0, 1]):
+        for c, x in enumerate([-1, 0, 1]):
+            add("U", r, c, x, 1, z, 0, 1, 0, idx)
+            idx += 1
+
+    # R: x=+1, rows y=+1..-1, cols z=+1..-1
+    for y in [1, 0, -1]:
+        for z in [1, 0, -1]:
+            add("R", None, None, 1, y, z, 1, 0, 0, idx)
+            idx += 1
+
+    # F: z=+1, rows y=+1..-1, cols x=-1..+1
+    for y in [1, 0, -1]:
+        for x in [-1, 0, 1]:
+            add("F", None, None, x, y, 1, 0, 0, 1, idx)
+            idx += 1
+
+    # D: y=-1, rows z=+1..-1, cols x=-1..+1
+    for z in [1, 0, -1]:
+        for x in [-1, 0, 1]:
+            add("D", None, None, x, -1, z, 0, -1, 0, idx)
+            idx += 1
+
+    # L: x=-1, rows y=+1..-1, cols z=-1..+1
+    for y in [1, 0, -1]:
+        for z in [-1, 0, 1]:
+            add("L", None, None, -1, y, z, -1, 0, 0, idx)
+            idx += 1
+
+    # B: z=-1, rows y=+1..-1, cols x=+1..-1
+    for y in [1, 0, -1]:
+        for x in [1, 0, -1]:
+            add("B", None, None, x, y, -1, 0, 0, -1, idx)
+            idx += 1
+
+    return idx_to_key, key_to_idx
+
+
+IDX_TO_KEY, KEY_TO_IDX = _build_facelet_index_maps()
+
+def _rot_y_neg90(v):
+    x, y, z = v
+    return (z, y, -x)
+
+def _rot_y_pos90(v):
+    x, y, z = v
+    return (-z, y, x)
+
+def _rot_x_neg90(v):
+    x, y, z = v
+    return (x, z, -y)
+
+def _rot_x_pos90(v):
+    x, y, z = v
+    return (x, -z, y)
+
+def _rot_z_neg90(v):
+    x, y, z = v
+    return (y, -x, z)
+
+def _rot_z_pos90(v):
+    x, y, z = v
+    return (-y, x, z)
+
+def _apply_move_once(facelets: list[str], move: str) -> list[str]:
+    """
+    Apply one clockwise face turn (U, D, R, L, F, B) to the facelets.
+    Uses 3D rotation of the appropriate layer + remapping indices.
+    """
+    new_faces = facelets[:]
+
+    def rotate_layer(selector_fn, rot_fn):
+        mapping = {}
+        for i in range(54):
+            x, y, z, nx, ny, nz = IDX_TO_KEY[i]
+            if selector_fn(x, y, z, nx, ny, nz):
+                px, py, pz = rot_fn((x, y, z))
+                nnx, nny, nnz = rot_fn((nx, ny, nz))
+                j = KEY_TO_IDX[(px, py, pz, nnx, nny, nnz)]
+                mapping[j] = i  # new index j gets old i
+
+        for j, i in mapping.items():
+            new_faces[j] = facelets[i]
+
+    if move == "U":
+        rotate_layer(lambda x, y, z, nx, ny, nz: y == 1, _rot_y_neg90)
+    elif move == "D":
+        rotate_layer(lambda x, y, z, nx, ny, nz: y == -1, _rot_y_pos90)
+    elif move == "R":
+        rotate_layer(lambda x, y, z, nx, ny, nz: x == 1, _rot_x_neg90)
+    elif move == "L":
+        rotate_layer(lambda x, y, z, nx, ny, nz: x == -1, _rot_x_pos90)
+    elif move == "F":
+        rotate_layer(lambda x, y, z, nx, ny, nz: z == 1, _rot_z_neg90)
+    elif move == "B":
+        rotate_layer(lambda x, y, z, nx, ny, nz: z == -1, _rot_z_pos90)
+    else:
+        raise ValueError(f"unknown move: {move}")
+
+    return new_faces
+
+def scramble_to_state(scramble: str) -> str:
+    """
+    Convert a scramble string (e.g. "R U R' U'") into a kociemba facelet state string
+    in URFDLB order, using letters U,R,F,D,L,B as the 6 colors.
+    """
+    # solved cube
+    facelets = []
+    for face in FACES:
+        facelets.extend([face] * 9)
+
+    if not scramble:
+        return "".join(facelets)
+
+    tokens = scramble.split()
+    for tok in tokens:
+        base = tok[0]
+        suf = tok[1:] if len(tok) > 1 else ""
+
+        turns = 1
+        if suf == "2":
+            turns = 2
+        elif suf == "'":
+            turns = 3  # three clockwise turns = one CCW
+
+        for _ in range(turns):
+            facelets = _apply_move_once(facelets, base)
+
+    return "".join(facelets)
 
 
 # ----------------------------
@@ -229,7 +409,12 @@ def get_scramble():
     if event != "3x3":
         return jsonify({"error": "Only 3x3 supported for now"}), 400
 
-    return jsonify({"scramble": generate_scramble_3x3(), "event": event})
+    scr = generate_scramble_3x3()
+    state = scramble_to_state_urfdlb(scr)
+
+    return jsonify({"scramble": scr, "event": event, "state": state})
+
+
 
 
 # POST /api/solves
@@ -544,3 +729,40 @@ def delete_solve(solve_id: int):
     db.session.commit()
 
     return jsonify({"success": True})
+
+# POST /api/solves/optimal
+@solves_bp.route("/solves/optimal", methods=["POST"])
+@require_auth
+def optimal_solution():
+    """
+    Compute a kociemba solution for a given cube state WITHOUT saving a solve.
+
+    Body:
+      { "state": "<54 chars URFDLB>", "event": "3x3" }
+
+    Returns:
+      { "solutionMoves": [...], "numMoves": N }
+    """
+    _user = request.current_user
+    data = request.get_json() or {}
+
+    state = data.get("state")
+    event = data.get("event", "3x3")
+
+    if event != "3x3":
+        return jsonify({"error": "Only 3x3 supported for now"}), 400
+    if state is None:
+        return jsonify({"error": "state is required"}), 400
+
+    valid, err = validate_cube_state_basic(state)
+    if not valid:
+        return jsonify({"error": f"Invalid cube state: {err}"}), 400
+
+    try:
+        solution_str = kociemba.solve(state)
+        solution_moves = solution_str.split()
+    except Exception:
+        return jsonify({"error": "This cube configuration cannot be solved."}), 400
+
+    return jsonify({"solutionMoves": solution_moves, "numMoves": len(solution_moves)})
+

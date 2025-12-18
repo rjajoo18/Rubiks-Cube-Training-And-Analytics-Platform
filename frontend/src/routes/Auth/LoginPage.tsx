@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import logo from '@/assets/logo.jpg';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -34,51 +35,95 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <Card className="w-full max-w-md animate-scale-in">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-gradient-to-br from-cube-red via-cube-blue to-cube-green rounded-lg mx-auto mb-4"></div>
-          <h1 className="text-3xl font-semibold mb-2">Welcome back</h1>
-          <p className="text-slate-400">Sign in to continue solving cubes</p>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md">
+        <div className="relative">
+          {/* Subtle glow effect behind card */}
+          <div className="pointer-events-none absolute -inset-[1px] rounded-[1.75rem] bg-gradient-to-r from-cube-red/20 via-cube-blue/20 to-cube-green/20 blur opacity-60" />
+          
+          <Card className="relative rounded-[1.75rem] border border-border/70 shadow-2xl backdrop-blur animate-scale-in">
+            {/* Header Section */}
+            <div className="text-center space-y-3 mb-8">
+              <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center">
+                <img
+                  src={logo}
+                  alt="CubeIQ logo"
+                  className="h-12 w-12 rounded-xl object-cover shadow-lg"
+                />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Welcome back</h1>
+                <p className="text-muted-foreground">
+                  Sign in to continue solving cubes
+                </p>
+              </div>
+            </div>
+
+
+            {/* Form Section */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Input
+                  label="Email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Input
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+
+              <Button 
+                type="submit" 
+                variant="primary" 
+                loading={loading} 
+                className="w-full mt-6"
+              >
+                Sign in
+              </Button>
+            </form>
+
+            {/* Footer Section */}
+            <div className="mt-6 pt-6 border-t border-border/50">
+              <p className="text-center text-sm text-muted-foreground">
+                Don't have an account?{' '}
+                <Link 
+                  to="/signup" 
+                  className="font-medium text-primary hover:underline transition-colors"
+                >
+                  Sign up
+                </Link>
+              </p>
+            </div>
+          </Card>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-          />
-
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-
-          <Button type="submit" variant="primary" loading={loading} className="w-full">
-            Sign in
-          </Button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-400">
-          Don't have an account?{' '}
-          <Link to="/signup" className="text-blue-400 hover:text-blue-300 transition-colors duration-150">
-            Sign up
-          </Link>
-        </p>
-      </Card>
+        {/* Additional Info Card */}
+        <Card className="mt-4 border border-border/50 bg-card/70 p-4 backdrop-blur">
+          <p className="text-xs text-center text-muted-foreground">
+            Secure login powered by industry-standard encryption
+          </p>
+        </Card>
+      </div>
     </div>
   );
 };

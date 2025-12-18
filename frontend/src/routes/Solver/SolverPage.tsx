@@ -11,6 +11,7 @@ type TimerState = 'idle' | 'ready' | 'running' | 'stopped';
 
 export const SolverPage: React.FC = () => {
   const [scramble, setScramble] = useState<string>('');
+  const [scrambleState, setScrambleState] = useState<string>(''); // 54-char URFDLB
   const [timerState, setTimerState] = useState<TimerState>('idle');
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [lastSolve, setLastSolve] = useState<Solve | null>(null);
@@ -20,7 +21,10 @@ export const SolverPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
-  // Refs so keyboard handlers always see the latest values (no stale closures)
+  // Optimal solution UI
+  const [optimalSolutionMoves, setOptimalSolutionMoves] = useState<string[] | null>(null);
+  const [solutionLoading, setSolutionLoading] = useState<boolean>(false);
+
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
   const spaceDownTimeRef = useRef<number>(0);
@@ -38,8 +42,12 @@ export const SolverPage: React.FC = () => {
 
   const loadNewScramble = useCallback(async () => {
     try {
+      setError('');
+      setOptimalSolutionMoves(null);
+
       const data = await apiClient.getScramble('3x3');
       setScramble(data.scramble);
+      setScrambleState(data.state);
     } catch {
       setError('Failed to load scramble');
     }
@@ -71,6 +79,7 @@ export const SolverPage: React.FC = () => {
           source: 'timer',
           notes: notes || undefined,
           event: '3x3',
+          state: scrambleState || undefined,
         });
 
         setLastSolve(response.solve);
@@ -85,13 +94,12 @@ export const SolverPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [scramble, penalty, notes, loadNewScramble]
+    [scramble, penalty, notes, scrambleState, loadNewScramble]
   );
 
   const startTimer = useCallback(() => {
     if (loadingRef.current) return;
 
-    // stop any existing loop
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = 0;
@@ -141,15 +149,12 @@ export const SolverPage: React.FC = () => {
     const state = timerStateRef.current;
     if (state === 'ready') {
       const holdTime = Date.now() - spaceDownTimeRef.current;
-      if (holdTime >= 300) {
-        startTimer();
-      } else {
-        setTimerState('idle');
-      }
+      if (holdTime >= 300) startTimer();
+      else setTimerState('idle');
     }
   }, [startTimer]);
 
-  // IMPORTANT: register key listeners ONCE. Do NOT cancel RAF here.
+  // key listeners once
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -174,7 +179,7 @@ export const SolverPage: React.FC = () => {
     };
   }, [handleSpaceDown, handleSpaceUp]);
 
-  // Optional: cancel RAF only when leaving the page
+  // cancel RAF on unmount only
   useEffect(() => {
     return () => {
       if (animationFrameRef.current) {
@@ -186,12 +191,8 @@ export const SolverPage: React.FC = () => {
 
   const handleManualStart = () => {
     if (loading) return;
-
-    if (timerState === 'idle') {
-      startTimer();
-    } else if (timerState === 'running') {
-      stopTimer();
-    }
+    if (timerState === 'idle') startTimer();
+    else if (timerState === 'running') stopTimer();
   };
 
   const handleScoreSolve = async (solveId: number) => {
@@ -207,188 +208,247 @@ export const SolverPage: React.FC = () => {
     }
   };
 
+  const handleRevealOptimalSolution = async () => {
+    if (timerState === 'running' || loading || solutionLoading) return;
+
+    const ok = window.confirm(
+      'Reveal the optimal (Kociemba) solution for this scramble? This will spoil the solve.'
+    );
+    if (!ok) return;
+
+    if (!scrambleState || scrambleState.length !== 54) {
+      setError('Missing cube state for this scramble. (Expected 54 chars.)');
+      return;
+    }
+
+    setSolutionLoading(true);
+    setError('');
+
+    try {
+      const res = await apiClient.getOptimalSolution({ state: scrambleState, event: '3x3' });
+      setOptimalSolutionMoves(res.solutionMoves);
+    } catch {
+      setError('Failed to compute optimal solution.');
+    } finally {
+      setSolutionLoading(false);
+    }
+  };
+
+  const handleCopySolution = async () => {
+    if (!optimalSolutionMoves) return;
+    try {
+      await navigator.clipboard.writeText(optimalSolutionMoves.join(' '));
+    } catch {
+      // ignore
+    }
+  };
+
   const getTimerColor = () => {
     if (timerState === 'ready') return 'text-green-400';
     if (timerState === 'running') return 'text-white';
     if (timerState === 'stopped') return 'text-blue-400';
-    return 'text-slate-400';
+    return 'text-muted-foreground';
   };
 
   const showSavingBanner = loading && timerState === 'stopped';
 
   return (
-    <div className="animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Timer</h1>
-        <p className="text-slate-400">Press and hold spacebar to start</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="space-y-6 animate-fade-in">
+          <div className="mb-8">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">Timer</h1>
+            <p className="text-muted-foreground">Press and hold spacebar to start</p>
+          </div>
 
-      {error && (
-        <Card className="bg-red-900/20 border-red-800 mb-6">
-          <p className="text-red-400">{error}</p>
-        </Card>
-      )}
+          {error && (
+            <Card className="bg-destructive/10 border-destructive/40 border">
+              <p className="text-destructive">{error}</p>
+            </Card>
+          )}
 
-      {showSavingBanner && (
-        <Card className="mb-6">
-          <p className="text-slate-300">Saving solve...</p>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="text-center">
-            <div className="mb-6">
-              <p className="text-sm text-slate-400 mb-2">Scramble</p>
-              <p className="text-lg md:text-xl font-mono text-slate-200">{scramble}</p>
-              <Button
-                variant="ghost"
-                onClick={loadNewScramble}
-                className="mt-3"
-                disabled={timerState === 'running' || loading}
-              >
-                {loading ? 'Saving...' : 'New Scramble'}
-              </Button>
-            </div>
-
-            <div className={`text-6xl md:text-8xl font-bold mb-6 transition-colors ${getTimerColor()}`}>
-              {formatMs(currentTime)}
-            </div>
-
-            <div className="flex justify-center gap-3 mb-6">
-              <Button
-                variant={timerState === 'running' ? 'secondary' : 'primary'}
-                onClick={handleManualStart}
-                disabled={timerState === 'stopped' || loading}
-              >
-                {timerState === 'running' ? 'Stop' : 'Start'}
-              </Button>
-
-              {timerState === 'stopped' && (
-                <Button variant="ghost" onClick={() => setTimerState('idle')} disabled={loading}>
-                  Reset
-                </Button>
-              )}
-            </div>
-
-            {timerState === 'stopped' && (
-              <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="grid grid-cols-3 gap-3">
-                  <Button
-                    variant={penalty === 'OK' ? 'primary' : 'ghost'}
-                    onClick={() => setPenalty('OK')}
-                    disabled={loading}
-                  >
-                    OK
-                  </Button>
-                  <Button
-                    variant={penalty === '+2' ? 'primary' : 'ghost'}
-                    onClick={() => setPenalty('+2')}
-                    disabled={loading}
-                  >
-                    +2
-                  </Button>
-                  <Button
-                    variant={penalty === 'DNF' ? 'primary' : 'ghost'}
-                    onClick={() => setPenalty('DNF')}
-                    disabled={loading}
-                  >
-                    DNF
-                  </Button>
-                </div>
-
-                <Input
-                  placeholder="Notes (optional)"
-                  value={notes}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-            )}
-          </Card>
-
-          {lastSolve && (
-            <Card>
-              <h3 className="text-lg font-semibold mb-4">Last Solve</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400">Time</span>
-                  <Badge variant="info">{formatDisplayTime(lastSolve.timeMs, lastSolve.penalty)}</Badge>
-                </div>
-
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400">Date</span>
-                  <span className="text-sm">{new Date(lastSolve.createdAt).toLocaleString()}</span>
-                </div>
-
-                {lastSolve.mlScore !== null && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Score</span>
-                    <Badge variant="success">{lastSolve.mlScore.toFixed(2)}</Badge>
-                  </div>
-                )}
-
-                {lastSolve.mlScore === null && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => handleScoreSolve(lastSolve.id)}
-                    className="w-full"
-                    disabled={loading}
-                  >
-                    Score This Solve
-                  </Button>
-                )}
+          {showSavingBanner && (
+            <Card className="border border-border/50 bg-card/60 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <p className="text-foreground">Saving solve...</p>
               </div>
             </Card>
           )}
-        </div>
 
-        <div className="space-y-6">
-          <Card>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Live Stats</h3>
-              <Button variant="ghost" onClick={loadStats} className="text-xs" disabled={loading}>
-                Refresh
-              </Button>
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="text-center border border-border/50 bg-card/60 backdrop-blur">
+                <div className="mb-8">
+                  <p className="text-sm text-muted-foreground mb-3">Scramble</p>
+                  <p className="text-lg md:text-xl font-mono text-foreground leading-relaxed">
+                    {scramble}
+                  </p>
 
-            {liveStats && (
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Count</span>
-                  <span>{liveStats.count}</span>
+                  <div className="mt-4 flex flex-wrap justify-center gap-3">
+                    <Button
+                      variant="ghost"
+                      onClick={loadNewScramble}
+                      disabled={timerState === 'running' || loading || solutionLoading}
+                    >
+                      {loading ? 'Saving...' : 'New Scramble'}
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      onClick={handleRevealOptimalSolution}
+                      disabled={timerState === 'running' || loading || solutionLoading}
+                    >
+                      {solutionLoading ? 'Computing...' : 'Reveal Optimal Solution'}
+                    </Button>
+
+                    {optimalSolutionMoves && (
+                      <Button variant="ghost" onClick={handleCopySolution} disabled={solutionLoading}>
+                        Copy
+                      </Button>
+                    )}
+                  </div>
+
+                  {optimalSolutionMoves && (
+                    <div className="mt-4 text-left">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Optimal solution (Kociemba) • {optimalSolutionMoves.length} moves
+                      </p>
+                      <div className="rounded-lg border border-border/50 bg-background/40 p-3 font-mono text-sm break-words">
+                        {optimalSolutionMoves.join(' ')}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Best</span>
-                  <span>{formatMs(liveStats.bestMs)}</span>
+
+                <div className={`text-7xl md:text-8xl font-bold mb-8 transition-colors ${getTimerColor()}`}>
+                  {formatMs(currentTime)}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Worst</span>
-                  <span>{formatMs(liveStats.worstMs)}</span>
+
+                <div className="flex justify-center gap-3 mb-6">
+                  <Button
+                    variant={timerState === 'running' ? 'secondary' : 'primary'}
+                    onClick={handleManualStart}
+                    disabled={timerState === 'stopped' || loading}
+                  >
+                    {timerState === 'running' ? 'Stop' : 'Start'}
+                  </Button>
+
+                  {timerState === 'stopped' && (
+                    <Button variant="ghost" onClick={() => setTimerState('idle')} disabled={loading}>
+                      Reset
+                    </Button>
+                  )}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Ao5</span>
-                  <span>{formatMs(liveStats.ao5Ms)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Ao12</span>
-                  <span>{formatMs(liveStats.ao12Ms)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Average</span>
-                  <span>{formatMs(liveStats.avgMs)}</span>
-                </div>
-                {liveStats.avgScore !== null && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Avg Score</span>
-                    <span>{liveStats.avgScore.toFixed(2)}</span>
+
+                {timerState === 'stopped' && (
+                  <div className="space-y-4 pt-6 border-t border-border/50">
+                    <div className="grid grid-cols-3 gap-3">
+                      <Button variant={penalty === 'OK' ? 'primary' : 'ghost'} onClick={() => setPenalty('OK')} disabled={loading}>
+                        OK
+                      </Button>
+                      <Button variant={penalty === '+2' ? 'primary' : 'ghost'} onClick={() => setPenalty('+2')} disabled={loading}>
+                        +2
+                      </Button>
+                      <Button variant={penalty === 'DNF' ? 'primary' : 'ghost'} onClick={() => setPenalty('DNF')} disabled={loading}>
+                        DNF
+                      </Button>
+                    </div>
+
+                    <Input
+                      placeholder="Notes (optional)"
+                      value={notes}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)}
+                      disabled={loading}
+                    />
                   </div>
                 )}
-              </div>
-            )}
-          </Card>
+              </Card>
+
+              {lastSolve && (
+                <Card className="border border-border/50 bg-card/60 backdrop-blur">
+                  <h3 className="text-lg font-semibold mb-4">Last Solve</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Time</span>
+                      <Badge variant="info">{formatDisplayTime(lastSolve.timeMs, lastSolve.penalty)}</Badge>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Date</span>
+                      <span className="text-sm text-foreground">{new Date(lastSolve.createdAt).toLocaleString()}</span>
+                    </div>
+
+                    {lastSolve.mlScore !== null && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Score</span>
+                        <Badge variant="success">{lastSolve.mlScore.toFixed(2)}</Badge>
+                      </div>
+                    )}
+
+                    {lastSolve.mlScore === null && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleScoreSolve(lastSolve.id)}
+                        className="w-full mt-2"
+                        disabled={loading}
+                      >
+                        Score This Solve
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            <div className="space-y-6">
+              <Card className="border border-border/50 bg-card/60 backdrop-blur">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Live Stats</h3>
+                  <Button variant="ghost" onClick={loadStats} className="text-xs h-8 px-3" disabled={loading}>
+                    Refresh
+                  </Button>
+                </div>
+
+                {liveStats && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                      <span className="text-sm text-muted-foreground">Count</span>
+                      <span className="text-sm font-medium text-foreground">{liveStats.count}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Best</span>
+                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.bestMs)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Worst</span>
+                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.worstMs)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Ao5</span>
+                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.ao5Ms)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Ao12</span>
+                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.ao12Ms)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                      <span className="text-sm text-muted-foreground">Average</span>
+                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.avgMs)}</span>
+                    </div>
+                    {liveStats.avgScore !== null && (
+                      <div className="flex justify-between items-center pt-2">
+                        <span className="text-sm text-muted-foreground">Avg Score</span>
+                        <span className="text-sm font-medium text-foreground">{liveStats.avgScore.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
