@@ -16,8 +16,14 @@ export const SolverPage: React.FC = () => {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [lastSolve, setLastSolve] = useState<Solve | null>(null);
   const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
+
+  // penalty/notes UI
   const [penalty, setPenalty] = useState<string>('OK');
   const [notes, setNotes] = useState<string>('');
+
+  // NEW: pending time to save after user chooses penalty/notes
+  const [pendingTimeMs, setPendingTimeMs] = useState<number | null>(null);
+
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
@@ -84,8 +90,11 @@ export const SolverPage: React.FC = () => {
 
         setLastSolve(response.solve);
         setLiveStats(response.liveStats);
+
+        // Clear UI after successful save
         setNotes('');
         setPenalty('OK');
+        setPendingTimeMs(null);
 
         await loadNewScramble();
       } catch {
@@ -99,6 +108,11 @@ export const SolverPage: React.FC = () => {
 
   const startTimer = useCallback(() => {
     if (loadingRef.current) return;
+
+    // starting a new solve should clear any pending unsaved solve state
+    setPendingTimeMs(null);
+    setPenalty('OK');
+    setNotes('');
 
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
@@ -118,18 +132,20 @@ export const SolverPage: React.FC = () => {
     animationFrameRef.current = requestAnimationFrame(tick);
   }, []);
 
+  // UPDATED: stop timer no longer saves immediately.
+  // Instead it sets pendingTimeMs and shows penalty/notes + Save Solve button.
   const stopTimer = useCallback(() => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = 0;
     }
 
-    const finalTime = performance.now() - startTimeRef.current;
+    const finalTime = Math.floor(performance.now() - startTimeRef.current);
     setCurrentTime(finalTime);
     setTimerState('stopped');
 
-    void saveSolve(Math.floor(finalTime));
-  }, [saveSolve]);
+    setPendingTimeMs(finalTime);
+  }, []);
 
   const handleSpaceDown = useCallback(() => {
     if (loadingRef.current) return;
@@ -195,6 +211,11 @@ export const SolverPage: React.FC = () => {
     else if (timerState === 'running') stopTimer();
   };
 
+  const handleSavePendingSolve = useCallback(() => {
+    if (pendingTimeMs == null) return;
+    void saveSolve(pendingTimeMs);
+  }, [pendingTimeMs, saveSolve]);
+
   const handleScoreSolve = async (solveId: number) => {
     try {
       const result = await apiClient.scoreSolve(solveId);
@@ -250,7 +271,16 @@ export const SolverPage: React.FC = () => {
     return 'text-muted-foreground';
   };
 
+  // UPDATED: banner should show while saving a stopped/pending solve
   const showSavingBanner = loading && timerState === 'stopped';
+
+  const handleReset = () => {
+    if (loading) return;
+    setTimerState('idle');
+    setPendingTimeMs(null);
+    setPenalty('OK');
+    setNotes('');
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -321,7 +351,9 @@ export const SolverPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className={`text-7xl md:text-8xl font-bold mb-8 transition-colors ${getTimerColor()}`}>
+                <div
+                  className={`text-7xl md:text-8xl font-bold mb-8 transition-colors ${getTimerColor()}`}
+                >
                   {formatMs(currentTime)}
                 </div>
 
@@ -335,7 +367,7 @@ export const SolverPage: React.FC = () => {
                   </Button>
 
                   {timerState === 'stopped' && (
-                    <Button variant="ghost" onClick={() => setTimerState('idle')} disabled={loading}>
+                    <Button variant="ghost" onClick={handleReset} disabled={loading}>
                       Reset
                     </Button>
                   )}
@@ -344,13 +376,25 @@ export const SolverPage: React.FC = () => {
                 {timerState === 'stopped' && (
                   <div className="space-y-4 pt-6 border-t border-border/50">
                     <div className="grid grid-cols-3 gap-3">
-                      <Button variant={penalty === 'OK' ? 'primary' : 'ghost'} onClick={() => setPenalty('OK')} disabled={loading}>
+                      <Button
+                        variant={penalty === 'OK' ? 'primary' : 'ghost'}
+                        onClick={() => setPenalty('OK')}
+                        disabled={loading}
+                      >
                         OK
                       </Button>
-                      <Button variant={penalty === '+2' ? 'primary' : 'ghost'} onClick={() => setPenalty('+2')} disabled={loading}>
+                      <Button
+                        variant={penalty === '+2' ? 'primary' : 'ghost'}
+                        onClick={() => setPenalty('+2')}
+                        disabled={loading}
+                      >
                         +2
                       </Button>
-                      <Button variant={penalty === 'DNF' ? 'primary' : 'ghost'} onClick={() => setPenalty('DNF')} disabled={loading}>
+                      <Button
+                        variant={penalty === 'DNF' ? 'primary' : 'ghost'}
+                        onClick={() => setPenalty('DNF')}
+                        disabled={loading}
+                      >
                         DNF
                       </Button>
                     </div>
@@ -361,6 +405,15 @@ export const SolverPage: React.FC = () => {
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)}
                       disabled={loading}
                     />
+
+                    <Button
+                      variant="primary"
+                      onClick={handleSavePendingSolve}
+                      disabled={loading || pendingTimeMs == null}
+                      className="w-full"
+                    >
+                      Save Solve
+                    </Button>
                   </div>
                 )}
               </Card>
@@ -371,12 +424,16 @@ export const SolverPage: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Time</span>
-                      <Badge variant="info">{formatDisplayTime(lastSolve.timeMs, lastSolve.penalty)}</Badge>
+                      <Badge variant="info">
+                        {formatDisplayTime(lastSolve.timeMs, lastSolve.penalty)}
+                      </Badge>
                     </div>
 
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Date</span>
-                      <span className="text-sm text-foreground">{new Date(lastSolve.createdAt).toLocaleString()}</span>
+                      <span className="text-sm text-foreground">
+                        {new Date(lastSolve.createdAt).toLocaleString()}
+                      </span>
                     </div>
 
                     {lastSolve.mlScore !== null && (
@@ -405,7 +462,12 @@ export const SolverPage: React.FC = () => {
               <Card className="border border-border/50 bg-card/60 backdrop-blur">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Live Stats</h3>
-                  <Button variant="ghost" onClick={loadStats} className="text-xs h-8 px-3" disabled={loading}>
+                  <Button
+                    variant="ghost"
+                    onClick={loadStats}
+                    className="text-xs h-8 px-3"
+                    disabled={loading}
+                  >
                     Refresh
                   </Button>
                 </div>
@@ -418,28 +480,40 @@ export const SolverPage: React.FC = () => {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Best</span>
-                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.bestMs)}</span>
+                      <span className="text-sm font-medium text-foreground">
+                        {formatMs(liveStats.bestMs)}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Worst</span>
-                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.worstMs)}</span>
+                      <span className="text-sm font-medium text-foreground">
+                        {formatMs(liveStats.worstMs)}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Ao5</span>
-                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.ao5Ms)}</span>
+                      <span className="text-sm font-medium text-foreground">
+                        {formatMs(liveStats.ao5Ms)}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Ao12</span>
-                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.ao12Ms)}</span>
+                      <span className="text-sm font-medium text-foreground">
+                        {formatMs(liveStats.ao12Ms)}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center pb-3 border-b border-border/50">
                       <span className="text-sm text-muted-foreground">Average</span>
-                      <span className="text-sm font-medium text-foreground">{formatMs(liveStats.avgMs)}</span>
+                      <span className="text-sm font-medium text-foreground">
+                        {formatMs(liveStats.avgMs)}
+                      </span>
                     </div>
                     {liveStats.avgScore !== null && (
                       <div className="flex justify-between items-center pt-2">
                         <span className="text-sm text-muted-foreground">Avg Score</span>
-                        <span className="text-sm font-medium text-foreground">{liveStats.avgScore.toFixed(2)}</span>
+                        <span className="text-sm font-medium text-foreground">
+                          {liveStats.avgScore.toFixed(2)}
+                        </span>
                       </div>
                     )}
                   </div>
