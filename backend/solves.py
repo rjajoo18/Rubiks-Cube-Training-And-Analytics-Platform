@@ -705,16 +705,42 @@ def edit_solve(solve_id: int):
 
     data = request.get_json() or {}
 
-    if "penalty" in data: 
-        if data["penalty"] not in (None, "+2", "DNF"):
+    # ----------------------------
+    # Penalty handling
+    # DB stores "OK" (NOT NULL)
+    # Frontend may send null for OK
+    # ----------------------------
+    if "penalty" in data:
+        p = data.get("penalty", None)
+
+        if p in (None, "", "OK"):
+            solve.penalty = "OK"
+        elif p in ("+2", "DNF"):
+            solve.penalty = p
+        else:
             return jsonify({"error": "Invalid penalty"}), 400
-        solve.penalty = data["penalty"]
 
+    # ----------------------------
+    # Notes handling
+    # Save NULL when empty (cleaner)
+    # ----------------------------
     if "notes" in data:
-        solve.notes = data["notes"] or " "
+        n = data.get("notes")
+        if n is None:
+            solve.notes = None
+        else:
+            n = str(n)
+            solve.notes = n if n.strip() else None
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        # log e server-side; don't leak internals to client
+        return jsonify({"error": "Failed to update solve"}), 500
+
     return jsonify({"solve": serialize_solve(solve)})
+
 
 # DELETE /api/solves/:id
 @solves_bp.route("/solves/<int:solve_id>", methods=["DELETE"])

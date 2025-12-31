@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   isOpen: boolean;
@@ -8,31 +9,57 @@ interface ModalProps {
 }
 
 export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+  const titleId = useId();
+
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
+    if (!isOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
     };
-  }, [isOpen]);
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = prevOverflow || "unset";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  // Render in a portal so it can't get trapped behind any stacking contexts
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
+      {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative glass rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
+
+      {/* Panel */}
+      <div
+        className="relative z-[10000] w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/50 bg-card/90 backdrop-blur p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()} // prevent clicks inside from closing
+      >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">{title}</h2>
+          <h2 id={titleId} className="text-xl font-semibold">
+            {title}
+          </h2>
+
           <button
             onClick={onClose}
             className="p-2 hover:bg-slate-800 rounded-lg transition-colors duration-150"
+            aria-label="Close modal"
+            type="button"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -44,8 +71,10 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
             </svg>
           </button>
         </div>
+
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
