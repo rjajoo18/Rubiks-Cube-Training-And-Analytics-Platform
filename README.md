@@ -1,4 +1,3 @@
-README.md (final version, no emojis)
 # Rubik’s Cube Project
 
 A full-stack Rubik’s Cube training and analytics platform that allows users to time solves, generate scrambles, compute optimal solutions, analyze performance trends, and score solves using heuristic and machine learning–based models.
@@ -95,46 +94,32 @@ In addition to traditional timing features, the platform computes cube solutions
 - PostgreSQL database (local or Supabase)
 
 ---
+### Backend Setup
 
-## Backend Setup
-
+Navigate to backend directory:
 ```bash
 cd backend
+```
 
+Create and activate virtual environment:
+```bash
+# Create virtual environment
 python -m venv .venv
-# Windows
+
+# Activate on Windows
 .venv\Scripts\activate
-# macOS / Linux
+
+# Activate on macOS/Linux
 source .venv/bin/activate
+```
 
+Install dependencies:
+```bash
 pip install -r requirements.txt
+```
 
-
-Create a .env file inside backend/ with the required environment variables (see below).
-
-Run the backend server:
-
-python app.py
-
-
-The backend will be available at:
-
-http://localhost:5000
-
-Frontend Setup
-cd frontend
-npm install
-npm run dev
-
-
-The frontend will be available at:
-
-http://localhost:5173
-
-Environment Variables
-
-Create backend/.env:
-
+Configure environment variables by creating a `.env` file inside `backend/`:
+```env
 FLASK_ENV=development
 SECRET_KEY=your_secret_key
 
@@ -142,105 +127,126 @@ SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DBNAME
 JWT_SECRET=your_jwt_secret
 
 CORS_ORIGINS=http://localhost:5173
+```
 
+Run the backend server:
+```bash
+python app.py
+```
 
-Optional frontend environment variables:
+Backend will be available at: http://localhost:5000
 
+### Frontend Setup
+
+Navigate to frontend directory:
+```bash
+cd frontend
+```
+
+Install dependencies:
+```bash
+npm install
+```
+
+Run development server:
+```bash
+npm run dev
+```
+
+Frontend will be available at: http://localhost:5173
+
+Optional: Configure API base URL by creating `.env` in `frontend/`:
+```env
 VITE_API_BASE_URL=http://localhost:5000/api
+```
 
-Project Structure
-Rubiks-Cube-Project/
-  backend/
-    app.py
-    auth/
-    solves/
-    ml/
-      training/
-      inference/
-    models.py
-    db.py
-    config.py
-  frontend/
-    src/
-      pages/
-      components/
-      api/
-      utils/
+## API Documentation
 
-API Overview
-Authentication
+### Authentication Endpoints
 
-POST /api/auth/register
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/auth/register | Register new user |
+| POST | /api/auth/login | Login user |
+| GET | /api/auth/me | Get current user info |
 
-POST /api/auth/login
+### Solves Endpoints
 
-GET /api/auth/me
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/solves | Create new solve |
+| GET | /api/solves | Get all solves for user |
+| PATCH | /api/solves/:id | Update solve |
+| DELETE | /api/solves/:id | Delete solve |
+| POST | /api/solves/:id/score | Calculate ML score for solve |
 
-Solves
+### Cube Utilities
 
-POST /api/solves
+- Scramble generation
+- Solution computation from cube state
 
-GET /api/solves
+## Machine Learning Pipeline
 
-PATCH /api/solves/:id
+### Current Implementation
 
-DELETE /api/solves/:id
+- Heuristic-based scoring using solve time, penalties, and user baselines
+- Scores normalized to a consistent scale (0-1000)
+- Stored with version metadata for reproducibility
 
-POST /api/solves/:id/score
+### Planned Extensions
 
-Cube Utilities
+- Dataset generation from historical solves
+- Gradient Boosted Model (GBM) training
+- Advanced feature engineering:
+  - Solve statistics and rolling averages
+  - Time-of-day patterns
+  - User performance trends
+- Model versioning and reproducible inference
+- Real-time score predictions
 
-Scramble generation
+## Tech Stack
 
-Solution computation from cube state
+### Backend
 
-Machine Learning Pipeline
-Current State
+- Flask - Web framework
+- SQLAlchemy - ORM
+- PostgreSQL - Database
+- JWT - Authentication
+- scikit-learn - Machine learning
+- pandas/numpy - Data processing
 
-Heuristic-based scoring using solve time, penalties, and user baselines
+### Frontend
 
-Scores normalized to a consistent scale
+- React - UI framework
+- Vite - Build tool
 
-Stored with version metadata
+### ML/Analytics
 
-Planned Extensions
+- joblib - Model serialization
+- matplotlib/seaborn - Visualization
+- scipy - Scientific computing
 
-Dataset generation from historical solves
+## Known Issues and Debugging
 
-Gradient Boosted Model training
+- Ensure SQLALCHEMY_DATABASE_URI is set before running training or backend scripts
+- Run backend commands from the correct working directory to avoid import errors
+- Configure CORS correctly to allow frontend-backend communication during development
 
-Feature engineering using solve statistics and user performance
+## Roadmap
 
-Model versioning and reproducible inference
+- Improved 3D cube visualization
+- Session-based analytics and statistics
+- Fully deployed ML scoring model with real-time predictions
+- WCA profile integration
+- Production deployment with Docker
+- CI/CD pipeline setup
+- Advanced performance forecasting
+- Personalized training recommendations
 
-Known Issues and Debugging Notes
+## Dependencies
 
-Ensure SQLALCHEMY_DATABASE_URI is set before running training or backend scripts
-
-Run backend commands from the correct working directory to avoid import errors
-
-Configure CORS correctly to allow frontend-backend communication during development
-
-Roadmap
-
-Improved cube visualization
-
-Session-based analytics
-
-Fully deployed ML scoring model
-
-WCA profile integration
-
-Production deployment with Docker and CI/CD
-
-License
-
-No license specified.
-
-
----
-
-## requirements.txt
+Full list of Python dependencies in requirements.txt:
+```
 aiomysql==0.3.2
 aiosqlite==0.21.0
 annotated-doc==0.0.3
@@ -418,3 +424,12 @@ websockets==15.0.1
 Werkzeug==3.1.3
 wheel==0.45.1
 windows-curses==2.4.1
+```
+
+## License
+
+No license specified.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
