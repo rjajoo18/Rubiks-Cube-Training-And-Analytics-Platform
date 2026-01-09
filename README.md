@@ -8,13 +8,19 @@ This project was built as an end-to-end software engineering and machine learnin
 
 ## Overview
 
-The Rubik’s Cube Project is designed to replicate and extend the workflow of competitive speedcubers in a web-based environment. Users can generate scrambles, time their solves directly in the browser, store results persistently, and view detailed statistics over time.
+Speedcubers rely on multiple disconnected tools to practice: timers, scramble generators, spreadsheets, and third-party analytics. This project consolidates that workflow into a single platform while introducing objective performance scoring based on historical context and modeled expectations.
 
-In addition to traditional timing features, the platform computes cube solutions programmatically and assigns a normalized performance score to each solve, with a roadmap toward a fully trained Gradient Boosted Machine (GBM) model.
+The long-term goal is to move beyond raw time tracking and toward skill-aware evaluation, answering questions like:
+
+- Was this solve good relative to my current ability?
+
+- How risky was this solve (DNF / +2)?
+
+- How am I trending over time, not just session-to-session?
 
 ---
 
-## Key Features
+## Core Features
 
 ### Solve Timing and Scramble Generation
 - In-browser solve timer with state transitions (idle, ready, running, stopped)
@@ -24,14 +30,15 @@ In addition to traditional timing features, the platform computes cube solutions
 
 ### Solve History and Analytics
 - Full solve history view with editing and deletion support
-- Live session statistics during timing
-- Aggregated long-term statistics on a dashboard
-- Personal best tracking and rolling averages
+- Session level live statistics
+- Dashboard with aggregated long-term metrics
+- Rolling averages (Ao5, Ao12), personal bests, and trends
 
 ### Automatic Solution Computation
 - Cube state and scramble processing
-- Optimal or near-optimal solution generation using a two-phase solving algorithm
+- Optimal or near-optimal solution generation using a two-phase solving algorithm (Kociemba)
 - Solution data stored alongside each solve for analysis and future extensions
+- Designed for future extensions such as efficiency analysis
 
 ### Authentication and Persistence
 - JWT-based authentication
@@ -39,13 +46,33 @@ In addition to traditional timing features, the platform computes cube solutions
 - Database-backed persistence using SQLAlchemy
 - Designed to work with Supabase Postgres or any compatible SQL database
 
-### Solve Scoring and Machine Learning
-- Baseline heuristic scoring system producing a normalized score
-- Machine learning pipeline under development using Gradient Boosted Models
-- Score versioning to track heuristic vs ML-based evaluations
-- Modular training and inference architecture
+## Machine Learning and Scoring System
 
----
+### Scoring Philosophy
+Raw solve time alone is a weak signal. This platform assigns a normalized score (0–100) that contextualizes each solve based on:
+- User skill prior (WCA profile or self-reported average)
+- Recent performance history
+- Penalties and solve characteristics
+- Expected vs actual performance
+
+### Current Architecure
+- Feature engineering pipeline (rolling averages, variance, skill priors)
+- Versioned model bundles to track scoring logic evolution
+- Heuristic baseline + Gradient Boosted Model inference
+- ML inference is cached per process to avoid repeated disk I/O
+- Scoring runs out-of-band from solve creation to preserve UX latency
+
+### Training and Retraining
+- Retraining is triggered after a configurable number of solves
+- Jobs are recorded in a database-backed queue
+- Training runs outside request paths for safety and scalability
+
+## System Design Decisions
+- Write-through analytics snapshots to make dashboard reads O(1)
+- Cursor pagination to avoid offset-based performance degradation
+- Idempotent solve creation to protect against frontend retries
+- Clear separation of concerns between API, ML inference, and training
+- Designed to scale from a single user to many without architectural changes
 
 ## Tech Stack
 
