@@ -8,6 +8,7 @@ import { SignupPage } from '@/routes/Auth/SignupPage';
 import { DashboardPage } from '@/routes/Dashboard/DashboardPage';
 import { SolverPage } from '@/routes/Solver/SolverPage';
 import { HistoryPage } from '@/routes/Solver/HistoryPage';
+import FriendsPage from '@/routes/Friends/FriendsPage';
 import { NotFoundPage } from '@/NotFoundPage';
 
 const App: React.FC = () => {
@@ -65,6 +66,20 @@ const App: React.FC = () => {
           </ProtectedRoute>
         }
       />
+
+      <Route path="/friends" element={<div style={{ color: 'white' }}>FRIENDS ROUTE WORKS</div>} />
+
+      <Route
+        path="/friends"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <FriendsPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+
       
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

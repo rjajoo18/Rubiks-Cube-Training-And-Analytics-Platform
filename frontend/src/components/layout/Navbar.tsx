@@ -68,6 +68,12 @@ export const Navbar: React.FC = () => {
                 >
                   History
                 </Link>
+                <Link
+                  to="/friends"
+                  className="text-slate-300 hover:text-white transition-colors duration-150"
+                >
+                  Friends
+                </Link>
               </div>
             )}
           </div>
@@ -158,6 +164,13 @@ export const Navbar: React.FC = () => {
                   onClick={() => setIsMenuOpen(false)}
                 >
                   History
+                </Link>
+                <Link
+                  to="/friends"
+                  className="block py-2 text-slate-300 hover:text-white transition-colors duration-150"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Friends
                 </Link>
                 <button
                   onClick={() => {

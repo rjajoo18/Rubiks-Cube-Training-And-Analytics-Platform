@@ -10,6 +10,55 @@ type ScoreSolveResponse = {
   plus2Risk: number;
 };
 
+export type BasicUser = {
+  id: number;
+  name: string | null;
+  email: string | null;
+};
+
+export type IncomingFriendRequest = {
+  id: number;
+  status: string;
+  createdAt: string | null;
+  respondedAt: string | null;
+  fromUser: BasicUser;
+};
+
+export type OutgoingFriendRequest = {
+  id: number;
+  status: string;
+  createdAt: string | null;
+  respondedAt: string | null;
+  toUser: BasicUser;
+};
+
+export type FriendRow = BasicUser;
+
+export type FriendStats = {
+  count: number | null;
+  bestMs: number | null;
+  worstMs: number | null;
+  ao5Ms: number | null;
+  ao12Ms: number | null;
+  avgMs: number | null;
+  avgScore: number | null;
+};
+
+export type FriendSolveMin = {
+  id: number;
+  timeMs: number | null;
+  penalty: string | null;
+  effectiveTimeMs: number | null;
+  mlScore: number | null;
+  createdAt: string | null;
+};
+
+export type FriendSummaryResponse = {
+  user: BasicUser;
+  stats: FriendStats;
+  recentSolves: FriendSolveMin[];
+};
+
 class APIClient {
   private client: AxiosInstance;
 
@@ -159,6 +208,46 @@ class APIClient {
     const response = await this.client.post('/auth/me/skill/wca', { wcaId });
     return response.data;
   }
+async sendFriendRequest(email: string): Promise<any> {
+    const response = await this.client.post('/friends/requests', { email });
+    return response.data;
+  }
+
+  async getIncomingFriendRequests(): Promise<{ items: any[] }> {
+    const response = await this.client.get('/friends/requests/incoming');
+    return response.data;
+  }
+
+  async getOutgoingFriendRequests(): Promise<{ items: any[] }> {
+    const response = await this.client.get('/friends/requests/outgoing');
+    return response.data;
+  }
+
+  async acceptFriendRequest(requestId: number): Promise<{ success: boolean }> {
+    const response = await this.client.post(`/friends/requests/${requestId}/accept`, {});
+    return response.data;
+  }
+
+  async declineFriendRequest(requestId: number): Promise<{ success: boolean }> {
+    const response = await this.client.post(`/friends/requests/${requestId}/decline`, {});
+    return response.data;
+  }
+
+  async cancelFriendRequest(requestId: number): Promise<{ success: boolean }> {
+    const response = await this.client.delete(`/friends/requests/${requestId}`);
+    return response.data;
+  }
+
+  async getFriends(): Promise<{ items: any[] }> {
+    const response = await this.client.get('/friends');
+    return response.data;
+  }
+
+  async getFriendSummary(friendId: number): Promise<any> {
+    const response = await this.client.get(`/friends/${friendId}/summary`);
+    return response.data;
+  }
+
 }
 
 export const apiClient = new APIClient();
