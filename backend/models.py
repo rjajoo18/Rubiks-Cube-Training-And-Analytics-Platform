@@ -3,10 +3,9 @@ from db import db
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-# Defines User model in table
 class User(db.Model):
     __tablename__ = "users"
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
@@ -18,7 +17,7 @@ class User(db.Model):
     self_reported_333_avg_ms = db.Column(db.Integer, nullable=True)
     skill_source = db.Column(db.String(100), nullable=True, default="unknown")
     wca_last_fetched_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    solves_since_retrain = db.Column(db.String(100), nullable=False, default="0")
+    solves_since_retrain = db.Column(db.Integer, nullable=False, default=0)
     last_retrain_at = db.Column(db.DateTime(timezone=True), nullable=True)
     active_model_version = db.Column(db.String(100), nullable=False, default="global_v2")
 
@@ -35,10 +34,9 @@ class User(db.Model):
         return self.wca_333_avg_ms or self.self_reported_333_avg_ms
 
 
-# Defines Solve model in table
 class Solve(db.Model):
     __tablename__ = "solves"
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
@@ -71,7 +69,7 @@ class MLRetrainJob(db.Model):
     """
     __tablename__ = "ml_retrain_jobs"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
     status = db.Column(db.String(20), nullable=False, default="queued")
@@ -89,7 +87,7 @@ class MLRetrainJob(db.Model):
 class DashboardSnapshot(db.Model):
     __tablename__ = "dashboard_snapshots"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     range_days = db.Column(db.Integer, nullable=False)
@@ -101,3 +99,33 @@ class DashboardSnapshot(db.Model):
         db.UniqueConstraint("user_id", "range_days", name="uq_dashboard_snapshot_user_range"),
     )
 
+class FriendRequests(db.Model):
+    __tablename__ = "friend_requests"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    from_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    to_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    status = db.Column(db.String(20), nullable=False, default="pending")
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    responded_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint("from_user_id", "to_user_id", name="uq_friend_request_from_to"),
+    )
+
+class Friends(db.Model):
+    __tablename__ = "friends"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    friend_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "friend_user_id", name="uq_friends_user_friend"),
+    )

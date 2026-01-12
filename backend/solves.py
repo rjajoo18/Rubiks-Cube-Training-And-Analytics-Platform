@@ -11,6 +11,7 @@ from db import db
 from models import Solve, User, MLRetrainJob
 from auth import require_auth
 import pycuber as pc
+from services.stats import compute_live_stats, effective_time_ms
 
 # Kociemba is a fast 2-phase Rubik's Cube solver.
 # It expects a 54-character cube string in "facelet" form (URFDLB order),
@@ -309,80 +310,6 @@ def serialize_solve(s: Solve):
 
         "source": s.source,
         "createdAt": s.created_at.isoformat() if s.created_at else None,
-    }
-
-
-# ----------------------------
-# TIME + STATS HELPERS
-# ----------------------------
-def effective_time_ms(s: Solve):
-    """
-    Apply penalties to raw time:
-      - DNF => None (excluded from averages)
-      - +2 => add 2000 ms
-      - None => raw time
-    """
-    if s.penalty == "DNF":
-        return None
-    if s.time_ms is None:
-        return None
-    if s.penalty == "+2":
-        return s.time_ms + 2000
-    return s.time_ms
-
-
-def compute_live_stats(user_id: int, event: str = "3x3", last_n: int = 200):
-    """
-    Compute live stats from the user's most recent solves.
-    We grab up to last_n solves to keep it fast.
-    """
-    base = Solve.query.filter_by(user_id=user_id, event=event)
-
-    recent = (
-        base.order_by(Solve.created_at.desc(), Solve.id.desc())
-        .limit(last_n)
-        .all()
-    )
-
-    times = []
-    scores = []
-
-    for s in recent:
-        et = effective_time_ms(s)
-        if et is not None:
-            times.append(et)
-        if s.ml_score is not None:
-            scores.append(s.ml_score)
-
-    def avg_int(arr):
-        if not arr:
-            return None
-        return sum(arr) // len(arr)
-
-    def ao5(arr):
-        # Standard Ao5: best and worst dropped from 5 solves.
-        if len(arr) < 5:
-            return None
-        w = sorted(arr[:5])
-        core = w[1:-1]
-        return int(sum(core) / len(core))
-
-    def ao12(arr):
-        # Standard Ao12: best and worst dropped from 12 solves.
-        if len(arr) < 12:
-            return None
-        w = sorted(arr[:12])
-        core = w[1:-1]
-        return int(sum(core) / len(core))
-
-    return {
-        "count": base.count(),
-        "bestMs": min(times) if times else None,
-        "worstMs": max(times) if times else None,
-        "ao5Ms": ao5(times),
-        "ao12Ms": ao12(times),
-        "avgMs": avg_int(times),
-        "avgScore": (sum(scores) / len(scores)) if scores else None,
     }
 
 
