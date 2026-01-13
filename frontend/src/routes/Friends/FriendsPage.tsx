@@ -295,9 +295,6 @@ const FriendsPage: React.FC = () => {
                   </Button>
                 </div>
 
-                <p className="mt-3 text-xs text-muted-foreground">
-                  MVP uses email because it’s unique in your DB.
-                </p>
               </Card>
 
               {/* Friends list */}

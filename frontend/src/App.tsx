@@ -67,7 +67,6 @@ const App: React.FC = () => {
         }
       />
 
-      <Route path="/friends" element={<div style={{ color: 'white' }}>FRIENDS ROUTE WORKS</div>} />
 
       <Route
         path="/friends"

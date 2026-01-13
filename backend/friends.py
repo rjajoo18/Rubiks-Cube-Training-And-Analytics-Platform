@@ -10,6 +10,7 @@ from services.stats import compute_live_stats, effective_time_ms  # use shared h
 friends_bp = Blueprint("friends", __name__)
 
 
+
 # ----------------------------
 # SERIALIZATION
 # ----------------------------
