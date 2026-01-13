@@ -63,9 +63,10 @@ class APIClient {
   private client: AxiosInstance;
 
   constructor() {
-    this.client = axios.create({
-      baseURL: '/api',
-    });
+    const API_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined;
+    const baseURL = API_BASE ? `${API_BASE.replace(/\/$/, '')}/api` : '/api';
+
+    this.client = axios.create({ baseURL });
 
     this.client.interceptors.request.use((config) => {
       const token = localStorage.getItem('rubiks_token');
