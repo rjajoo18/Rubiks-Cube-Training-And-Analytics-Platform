@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 
-type TimerState = 'idle' | 'ready' | 'running' | 'stopped';
+type TimerState = 'idle' | 'ready' | 'inspection' | 'running' | 'stopped';
+
+const INSPECTION_MS = 15000;
+const LATE_PLUS2_MS = 2000;
 
 export const SolverPage: React.FC = () => {
   const [scramble, setScramble] = useState<string>('');
@@ -31,9 +34,16 @@ export const SolverPage: React.FC = () => {
   const [optimalSolutionMoves, setOptimalSolutionMoves] = useState<string[] | null>(null);
   const [solutionLoading, setSolutionLoading] = useState<boolean>(false);
 
+  // Inspection UI
+  const [inspectionMsLeft, setInspectionMsLeft] = useState<number>(INSPECTION_MS);
+  const [inspectionOverMs, setInspectionOverMs] = useState<number>(0);
+
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
   const spaceDownTimeRef = useRef<number>(0);
+
+  const inspectionStartRef = useRef<number>(0);
+  const inspectionRafRef = useRef<number>(0);
 
   const timerStateRef = useRef<TimerState>('idle');
   const loadingRef = useRef<boolean>(false);
@@ -135,6 +145,13 @@ export const SolverPage: React.FC = () => {
     [scramble, penalty, notes, scrambleState, loadNewScramble, loadStats]
   );
 
+  const stopInspection = useCallback(() => {
+    if (inspectionRafRef.current) {
+      cancelAnimationFrame(inspectionRafRef.current);
+      inspectionRafRef.current = 0;
+    }
+  }, []);
+
   const startTimer = useCallback(() => {
     if (loadingRef.current) return;
 
@@ -161,6 +178,60 @@ export const SolverPage: React.FC = () => {
     animationFrameRef.current = requestAnimationFrame(tick);
   }, []);
 
+  const startInspection = useCallback(() => {
+    if (loadingRef.current) return;
+
+    // starting a new attempt clears pending solve state
+    setPendingTimeMs(null);
+    setPenalty('OK');
+    setNotes('');
+
+    // kill running timer RAF if somehow exists
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = 0;
+    }
+
+    stopInspection();
+
+    inspectionStartRef.current = performance.now();
+    setInspectionMsLeft(INSPECTION_MS);
+    setInspectionOverMs(0);
+    setTimerState('inspection');
+
+    const tick = () => {
+      const now = performance.now();
+      const elapsed = now - inspectionStartRef.current;
+
+      const left = Math.max(0, INSPECTION_MS - elapsed);
+      setInspectionMsLeft(left);
+
+      const over = Math.max(0, elapsed - INSPECTION_MS);
+      setInspectionOverMs(over);
+
+      inspectionRafRef.current = requestAnimationFrame(tick);
+    };
+
+    inspectionRafRef.current = requestAnimationFrame(tick);
+  }, [stopInspection]);
+
+  const beginSolveFromInspection = useCallback(() => {
+    if (loadingRef.current) return;
+
+    const over = inspectionOverMs;
+
+    if (over > LATE_PLUS2_MS) {
+      setPenalty('DNF');
+    } else if (over > 0) {
+      setPenalty('+2');
+    } else {
+      setPenalty('OK');
+    }
+
+    stopInspection();
+    startTimer();
+  }, [inspectionOverMs, stopInspection, startTimer]);
+
   // UPDATED: stop timer no longer saves immediately.
   // Instead it sets pendingTimeMs and shows penalty/notes + Save Solve button.
   const stopTimer = useCallback(() => {
@@ -183,10 +254,12 @@ export const SolverPage: React.FC = () => {
     if (state === 'idle') {
       spaceDownTimeRef.current = Date.now();
       setTimerState('ready');
+    } else if (state === 'inspection') {
+      beginSolveFromInspection();
     } else if (state === 'running') {
       stopTimer();
     }
-  }, [stopTimer]);
+  }, [stopTimer, beginSolveFromInspection]);
 
   const handleSpaceUp = useCallback(() => {
     if (loadingRef.current) return;
@@ -194,10 +267,10 @@ export const SolverPage: React.FC = () => {
     const state = timerStateRef.current;
     if (state === 'ready') {
       const holdTime = Date.now() - spaceDownTimeRef.current;
-      if (holdTime >= 300) startTimer();
+      if (holdTime >= 300) startInspection();
       else setTimerState('idle');
     }
-  }, [startTimer]);
+  }, [startInspection]);
 
   // key listeners once
   useEffect(() => {
@@ -231,12 +304,18 @@ export const SolverPage: React.FC = () => {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = 0;
       }
+      if (inspectionRafRef.current) {
+        cancelAnimationFrame(inspectionRafRef.current);
+        inspectionRafRef.current = 0;
+      }
     };
   }, []);
 
   const handleManualStart = () => {
     if (loading) return;
-    if (timerState === 'idle') startTimer();
+
+    if (timerState === 'idle') startInspection();
+    else if (timerState === 'inspection') beginSolveFromInspection();
     else if (timerState === 'running') stopTimer();
   };
 
@@ -303,6 +382,7 @@ export const SolverPage: React.FC = () => {
 
   const getTimerColor = () => {
     if (timerState === 'ready') return 'text-green-400';
+    if (timerState === 'inspection') return 'text-yellow-300';
     if (timerState === 'running') return 'text-white';
     if (timerState === 'stopped') return 'text-blue-400';
     return 'text-muted-foreground';
@@ -313,10 +393,26 @@ export const SolverPage: React.FC = () => {
 
   const handleReset = () => {
     if (loading) return;
+
+    if (inspectionRafRef.current) {
+      cancelAnimationFrame(inspectionRafRef.current);
+      inspectionRafRef.current = 0;
+    }
+
     setTimerState('idle');
     setPendingTimeMs(null);
     setPenalty('OK');
     setNotes('');
+    setInspectionMsLeft(INSPECTION_MS);
+    setInspectionOverMs(0);
+  };
+
+  const renderMainTime = () => {
+    if (timerState === 'inspection') {
+      if (inspectionMsLeft > 0) return (inspectionMsLeft / 1000).toFixed(2);
+      return `+${(inspectionOverMs / 1000).toFixed(2)}`;
+    }
+    return formatMs(currentTime);
   };
 
   return (
@@ -391,7 +487,7 @@ export const SolverPage: React.FC = () => {
                 <div
                   className={`text-7xl md:text-8xl font-bold mb-8 transition-colors ${getTimerColor()}`}
                 >
-                  {formatMs(currentTime)}
+                  {renderMainTime()}
                 </div>
 
                 <div className="flex justify-center gap-3 mb-6">
@@ -518,7 +614,6 @@ export const SolverPage: React.FC = () => {
                         <span className="text-sm text-foreground">{lastSolve.scoreVersion}</span>
                       </div>
                     )}
-
                   </div>
                 </Card>
               )}
