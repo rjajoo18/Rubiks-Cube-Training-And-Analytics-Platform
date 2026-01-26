@@ -23,7 +23,9 @@ FEATURE_ORDER = [
     "solve_index",
 ]
 
-def score_solve_profile_v2(db_session: Session, user: User, solve: Solve) -> Tuple[float, int | None, float, float, str]:
+def score_solve_profile_v2(
+    db_session: Session, user: User, solve: Solve
+) -> Tuple[float, int | None, float, float, str]:
     """
     Returns:
       (ml_score_0_100, expected_time_ms, dnf_risk, plus2_risk, version_string)
@@ -37,13 +39,8 @@ def score_solve_profile_v2(db_session: Session, user: User, solve: Solve) -> Tup
     # If DNF or missing time -> hard score behavior
     eff = effective_time_ms(solve.time_ms, solve.penalty)
     if eff is None:
-        # DNF score policy:
-        # - expected time unknown
-        # - DNF risk / +2 risk still can be predicted but isn't meaningful here
         return 0.0, None, 1.0, 0.0, version
 
-    # Pull prior solves (limit to last ~80 to keep it fast)
-    # We only need recent history to compute rolling stats.
     recent = (
         db_session.query(Solve)
         .filter(
@@ -56,18 +53,15 @@ def score_solve_profile_v2(db_session: Session, user: User, solve: Solve) -> Tup
         .limit(80)
         .all()
     )
-
-    # We fetched in reverse order; for rolling stats we want oldest->newest.
     recent = list(reversed(recent))
 
-    history = []
+    history: list[int] = []
     for s in recent:
         e = effective_time_ms(s.time_ms, s.penalty)
         if e is not None:
             history.append(e)
 
     solve_index = len(recent) + 1
-
     has_plus2 = 1 if solve.penalty == "+2" else 0
     skill_prior = user.get_skill_prior_ms()
 
@@ -80,10 +74,9 @@ def score_solve_profile_v2(db_session: Session, user: User, solve: Solve) -> Tup
         solve_index=solve_index,
     )
 
-    # Convert dict -> vector in correct feature order
     X = [[feats[k] for k in FEATURE_ORDER]]
 
-    # Predict risks
+    # Predict risks (these models still expect effective_time_ms in X)
     dnf_risk = float(bundle["dnf_model"].predict_proba(X)[0][1])
     plus2_risk = float(bundle["plus2_model"].predict_proba(X)[0][1])
 
@@ -92,13 +85,14 @@ def score_solve_profile_v2(db_session: Session, user: User, solve: Solve) -> Tup
     if baseline is None:
         baseline = float(skill_prior) if skill_prior is not None else float(eff)
 
-    ratio = expected_time / float(baseline)
-    ml_score = score_from_ratio(ratio)
+    # Expected time = pre-solve expectation (NO leakage)
+    expected_time = int(round(float(baseline)))
 
-     # Predict expected time
-    expected_time = int(round(baseline))
+    # Score compares actual solve vs expected baseline
+    # ratio < 1  -> faster than expected -> higher score
+    # ratio > 1  -> slower than expected -> lower score
+    ratio = eff / float(baseline) if baseline > 0 else 1.0
+    ml_score = score_from_ratio(ratio)
 
     return ml_score, expected_time, dnf_risk, plus2_risk, version
 
-import sys
-print(sys.path)
